@@ -1,0 +1,33 @@
+{
+  "name": "viarde-tracker",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "scan": "tsx scripts/scan.ts",
+    "scan:sizes": "tsx scripts/scan.ts --sizes",
+    "probe:comments": "tsx scripts/probe-comments.ts",
+    "probe:file": "tsx scripts/probe-file-comments.ts"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.62.7",
+    "better-sqlite3": "^11.7.0",
+    "drizzle-orm": "^0.38.2",
+    "lucide-react": "^1.33.0",
+    "next": "^15.1.3",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "sharp": "^0.33.5"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "sass": "^1.83.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

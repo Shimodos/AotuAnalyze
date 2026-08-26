@@ -1,0 +1,314 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px 22px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  flex-wrap: wrap;
+}
+
+.titleBlock {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.subtitle {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.meta {
+  color: var(--muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 14px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.scanButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  font-size: 14px;
+  font-weight: 500;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+
+  &:hover:not(:disabled) {
+    border-color: var(--accent);
+    background: var(--hover);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+}
+
+.boardWrap {
+  position: relative;
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.board {
+  flex: 1;
+  display: flex;
+  gap: 14px;
+  padding: 16px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 304px;
+  min-height: 0;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.columnHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.columnName {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+
+.columnCount {
+  min-width: 24px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.columnBody {
+  flex: 1;
+  // min-height: 0 обязателен: без него вложенный flex-контейнер раздувается
+  // под содержимое и overflow-y не срабатывает
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  overflow-y: auto;
+  // По оси Y — contain: докрутили колонку до конца, дальше ничего не уезжает.
+  // По оси X — auto обязателен: overflow-y: auto делает элемент скролл-контейнером
+  // и по горизонтали тоже, а contain на обеих осях запрещал бы передачу
+  // горизонтального колеса доске — прокрутка мышью не работала бы над карточками.
+  overscroll-behavior: auto contain;
+}
+
+.columnEmpty {
+  padding: 8px 2px;
+  color: var(--faint);
+  font-size: 14px;
+}
+
+.error {
+  margin: 14px 22px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--alert);
+  border-radius: var(--radius-sm);
+  color: var(--alert);
+  font-size: 14px;
+}
+
+.empty {
+  padding: 22px;
+  color: var(--muted);
+  font-size: 15px;
+}
+
+.notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 14px 22px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 14px;
+  word-break: break-all;
+}
+
+.noticeClose {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+
+  &:hover {
+    color: var(--text);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+
+// ── Зоны автопрокрутки у краёв доски.
+// Только подсказка: события мыши обрабатывает сам контейнер, поэтому
+// pointer-events: none обязателен — иначе перекрывались бы крайние карточки.
+.edgeLeft,
+.edgeRight,
+.edgeLeftActive,
+.edgeRightActive {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 90px;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+  color: var(--muted);
+  opacity: 0.45;
+  transition:
+    opacity 0.15s ease,
+    color 0.15s ease;
+
+  svg {
+    filter: drop-shadow(0 1px 3px var(--shadow));
+  }
+}
+
+.edgeLeft,
+.edgeLeftActive {
+  left: 0;
+  justify-content: flex-start;
+  padding-left: 6px;
+  background: linear-gradient(to right, var(--edge-fade), transparent);
+}
+
+.edgeRight,
+.edgeRightActive {
+  right: 0;
+  justify-content: flex-end;
+  padding-right: 6px;
+  background: linear-gradient(to left, var(--edge-fade), transparent);
+}
+
+.edgeLeftActive,
+.edgeRightActive {
+  opacity: 1;
+  color: var(--accent);
+}
+
+// ── Переключатель языка и кнопка темы
+.langSwitch {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+}
+
+.langOption,
+.langActive {
+  padding: 5px 11px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: none;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+
+  &:hover {
+    color: var(--text);
+  }
+}
+
+.langActive {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.iconToggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  color: var(--muted);
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+
+  &:hover {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+}

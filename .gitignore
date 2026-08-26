@@ -1,0 +1,12 @@
+node_modules/
+.next/
+data/*.db
+data/*.db-*
+.cache/
+next-env.d.ts
+*.tsbuildinfo
+
+# Секреты приложения Dropbox. .env.example коммитим, .env.local — никогда.
+.env
+.env.local
+.env*.local
