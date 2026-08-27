@@ -30,6 +30,8 @@ export const CONFIG = {
   serviceSceneNames: [
     'test', 'tests', 'old', 'prev', 'temp', 'tmp',
     'new folder', 'cam_ref', 'backgrounds', 'test backgrounds', 'lessons',
+    // рабочая папка внутри 04_PSD, сценой не является
+    'ai', 'jpeg',
   ],
 
   /**

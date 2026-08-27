@@ -3,7 +3,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { BoardCard } from '@/app/api/board/route';
 import { useI18n } from '@/i18n';
-import { Activity, Clock, FolderOpen, ICON, ICON_SM, Pin, Send, TriangleAlert, Users } from './icons';
+import { Activity, Clock, FolderOpen, ICON, ICON_SM, Link2, Pin, Send, TriangleAlert, Users } from './icons';
 import styles from './Card.module.scss';
 
 interface Props {
@@ -11,6 +11,7 @@ interface Props {
   thresholds: { warn: number; alert: number };
   onOpen: () => void;
   onOpenFolder: (path: string) => void;
+  onCopyLink: (url: string) => void;
 }
 
 function staleClass(days: number | null, t: { warn: number; alert: number }) {
@@ -20,7 +21,7 @@ function staleClass(days: number | null, t: { warn: number; alert: number }) {
   return '';
 }
 
-export function Card({ card, thresholds, onOpen, onOpenFolder }: Props) {
+export function Card({ card, thresholds, onOpen, onOpenFolder, onCopyLink }: Props) {
   const queryClient = useQueryClient();
   const { t } = useI18n();
 
@@ -40,8 +41,14 @@ export function Card({ card, thresholds, onOpen, onOpenFolder }: Props) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['board'] }),
   });
 
-  const progress =
-    card.scenesTotal > 0 ? Math.round((card.scenesRendered / card.scenesTotal) * 100) : null;
+  // Когда есть план клиента, показываем прогресс по кадрам: он точнее,
+  // чем «сцен готово», потому что сцена бывает сделана наполовину.
+  const hasPlan = card.plannedTotal > 0;
+  const progress = hasPlan
+    ? Math.min(100, Math.round((card.plannedDone / card.plannedTotal) * 100))
+    : card.scenesTotal > 0
+      ? Math.round((card.scenesRendered / card.scenesTotal) * 100)
+      : null;
 
   return (
     <article className={styles.card} onClick={onOpen}>
@@ -70,6 +77,18 @@ export function Card({ card, thresholds, onOpen, onOpenFolder }: Props) {
             >
               <FolderOpen {...ICON} />
             </button>
+            {card.webUrl && (
+              <button
+                className={styles.iconButton}
+                title={t('action.copyLink')}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCopyLink(card.webUrl!);
+                }}
+              >
+                <Link2 {...ICON} />
+              </button>
+            )}
             <button
               className={card.isPinned ? styles.pinActive : styles.iconButton}
               title={
@@ -93,7 +112,9 @@ export function Card({ card, thresholds, onOpen, onOpenFolder }: Props) {
               <span style={{ width: `${progress}%` }} />
             </div>
             <span className={styles.progressText}>
-              {t('card.scenes', { done: card.scenesRendered, total: card.scenesTotal })}
+              {hasPlan
+                ? t('card.planned', { done: card.plannedDone, total: card.plannedTotal })
+                : t('card.scenes', { done: card.scenesRendered, total: card.scenesTotal })}
             </span>
           </div>
         )}

@@ -53,7 +53,24 @@ export function useOpenFolder() {
     }
   }, [t]);
 
-  return { openFolder, notice, dismissNotice: useCallback(() => setNotice(null), []) };
+  /** Копирует ссылку на веб-версию Dropbox. Работает и по http в локальной сети. */
+  const copyLink = useCallback(
+    async (url: string) => {
+      const ok = await copyToClipboard(url);
+      setNotice({
+        kind: ok ? 'info' : 'error',
+        text: ok ? t('notice.linkCopied', { path: url }) : t('notice.linkFailed', { path: url }),
+      });
+    },
+    [t],
+  );
+
+  return {
+    openFolder,
+    copyLink,
+    notice,
+    dismissNotice: useCallback(() => setNotice(null), []),
+  };
 }
 
 async function copyToClipboard(text: string): Promise<boolean> {

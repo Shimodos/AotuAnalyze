@@ -1,4 +1,5 @@
 import * as nodePath from 'node:path';
+import { folderWebUrl } from '@/dropbox/webUrl';
 import { NextResponse } from 'next/server';
 import { desc, eq } from 'drizzle-orm';
 import { getDb, schema } from '@/db';
@@ -58,6 +59,7 @@ function buildDetail(key: string) {
       title: project.title,
       folderName: project.folderName,
       path: project.path,
+      webUrl: folderWebUrl(project.path),
       evidence: { code: project.evidence, params: project.evidenceParams ?? undefined },
       anomalies: project.anomalies ?? [],
       missingFolders: project.missingFolders ?? [],
@@ -69,6 +71,7 @@ function buildDetail(key: string) {
     // а интерфейсу они нужны, чтобы открыть папку в проводнике.
     scenes: scenes.map((s) => ({
       path: nodePath.win32.join(project.path, '04_JPG', s.name),
+      webUrl: folderWebUrl(nodePath.win32.join(project.path, '04_JPG', s.name)),
       name: s.name,
       sceneNumber: s.sceneNumber,
       skus: s.skus ?? [],
@@ -77,7 +80,12 @@ function buildDetail(key: string) {
       exrCount: s.exrCount,
       psdCount: s.psdCount,
       psdFolder: s.psdFolder,
+      psdStages: s.psdStages ?? [],
       phase: s.phase,
+      plannedTotal: s.plannedTotal,
+      plannedMatched: s.plannedMatched,
+      plannedMissing: s.plannedMissing ?? [],
+      plannedGroups: s.plannedGroups ?? [],
       lastExrAt: s.lastExrAt?.getTime() ?? null,
       versions: s.versions ?? [],
       lastImageAt: s.lastImageAt?.getTime() ?? null,
@@ -85,6 +93,7 @@ function buildDetail(key: string) {
     })),
     deliveries: deliveries.map((d) => ({
       path: nodePath.win32.join(project.path, '05_Outbox', d.folderName),
+      webUrl: folderWebUrl(nodePath.win32.join(project.path, '05_Outbox', d.folderName)),
       folderName: d.folderName,
       kind: d.kind,
       round: d.round,

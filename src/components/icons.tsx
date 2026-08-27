@@ -15,6 +15,7 @@ export {
   CloudOff,
   FolderOpen,
   Layers,
+  Link2,
   Moon,
   Pin,
   RefreshCw,

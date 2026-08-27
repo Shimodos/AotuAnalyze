@@ -39,6 +39,8 @@ CREATE TABLE IF NOT EXISTS projects (
   scenes_rendering INTEGER NOT NULL DEFAULT 0,
   scenes_converted INTEGER NOT NULL DEFAULT 0,
   scenes_post INTEGER NOT NULL DEFAULT 0,
+  planned_total INTEGER NOT NULL DEFAULT 0,
+  planned_done INTEGER NOT NULL DEFAULT 0,
   is_settling INTEGER NOT NULL DEFAULT 0,
   is_archived INTEGER NOT NULL DEFAULT 0,
   has_client_feedback INTEGER NOT NULL DEFAULT 0,
@@ -68,7 +70,12 @@ CREATE TABLE IF NOT EXISTS scenes (
   psd_count INTEGER NOT NULL DEFAULT 0,
   last_psd_at INTEGER,
   psd_folder TEXT,
+  psd_stages TEXT,
   phase TEXT NOT NULL DEFAULT 'EMPTY',
+  planned_total INTEGER NOT NULL DEFAULT 0,
+  planned_matched INTEGER NOT NULL DEFAULT 0,
+  planned_missing TEXT,
+  planned_groups TEXT,
   versions TEXT,
   max_version TEXT,
   last_image_at INTEGER,
@@ -178,7 +185,15 @@ export function getDb() {
   addColumnIfMissing(sqlite, 'scenes', 'psd_count', 'INTEGER NOT NULL DEFAULT 0');
   addColumnIfMissing(sqlite, 'scenes', 'last_psd_at', 'INTEGER');
   addColumnIfMissing(sqlite, 'scenes', 'psd_folder', 'TEXT');
+  addColumnIfMissing(sqlite, 'scenes', 'psd_stages', 'TEXT');
   addColumnIfMissing(sqlite, 'scenes', 'phase', "TEXT NOT NULL DEFAULT 'EMPTY'");
+  addColumnIfMissing(sqlite, 'projects', 'planned_total', 'INTEGER NOT NULL DEFAULT 0');
+  addColumnIfMissing(sqlite, 'projects', 'planned_done', 'INTEGER NOT NULL DEFAULT 0');
+  addColumnIfMissing(sqlite, 'scenes', 'planned_total', 'INTEGER NOT NULL DEFAULT 0');
+  addColumnIfMissing(sqlite, 'scenes', 'planned_done', 'INTEGER NOT NULL DEFAULT 0');
+  addColumnIfMissing(sqlite, 'scenes', 'planned_matched', 'INTEGER NOT NULL DEFAULT 0');
+  addColumnIfMissing(sqlite, 'scenes', 'planned_missing', 'TEXT');
+  addColumnIfMissing(sqlite, 'scenes', 'planned_groups', 'TEXT');
 
   _db = drizzle(sqlite, { schema });
   return _db;

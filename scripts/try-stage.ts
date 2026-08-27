@@ -9,7 +9,8 @@ function scene(over: Partial<ScannedScene>): ScannedScene {
   return {
     name: 'Scene_1', skus: ['KPF-1610'], sceneNumber: '1', isService: false,
     imageCount: 0, exrCount: 0, lastExrAt: null, psdCount: 0, lastPsdAt: null,
-    psdFolder: null, phase: 'EMPTY', versions: [], maxVersion: null,
+    psdFolder: null, psdStages: [], plannedTotal: 0, plannedMatched: 0, plannedMissing: [], plannedGroups: [],
+    phase: 'EMPTY', versions: [], maxVersion: null,
     lastImageAt: null, coverPath: null, hasUnrecognizedFiles: false, ...over,
   };
 }

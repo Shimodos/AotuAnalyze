@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { desc, eq, sql } from 'drizzle-orm';
 import { COLUMNS, CONFIG, type Column } from '@/config';
 import { getDb, schema } from '@/db';
+import { folderWebUrl } from '@/dropbox/webUrl';
 import type { Localized } from '@/i18n/types';
 import { syncOnce } from '@/sync/sync';
 
@@ -13,6 +14,8 @@ export interface BoardCard {
   title: string;
   folderName: string;
   path: string;
+  /** ссылка на эту папку в веб-версии Dropbox */
+  webUrl: string | null;
   /** что показывать: закреплённая колонка, если карточка закреплена */
   column: Column;
   /** что насчитал скан на самом деле — расходится с column только под пином */
@@ -32,6 +35,9 @@ export interface BoardCard {
   scenesRendering: number;
   scenesConverted: number;
   scenesPost: number;
+  /** план из таблицы клиента: сколько кадров нужно и сколько уже есть */
+  plannedTotal: number;
+  plannedDone: number;
   daysInStage: number | null;
   daysSinceActivity: number | null;
   isSettling: boolean;
@@ -119,6 +125,7 @@ function buildBoard() {
     title: r.title,
     folderName: r.folderName,
     path: r.path,
+    webUrl: folderWebUrl(r.path),
     column: (r.isPinned && r.pinnedColumn ? r.pinnedColumn : r.column) as Column,
     actualColumn: r.column as Column,
     ball: r.ball,
@@ -133,6 +140,8 @@ function buildBoard() {
     scenesRendering: r.scenesRendering,
     scenesConverted: r.scenesConverted,
     scenesPost: r.scenesPost,
+    plannedTotal: r.plannedTotal,
+    plannedDone: r.plannedDone,
     daysInStage: days(r.stageSince),
     daysSinceActivity: days(r.lastActivityAt),
     isSettling: r.isSettling,

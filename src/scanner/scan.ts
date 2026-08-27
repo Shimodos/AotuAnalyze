@@ -12,6 +12,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { CONFIG } from '@/config';
+import { assignPlans, findPlanFile, parsePlan, type ScenePlan } from './plan';
 import type { Localized } from '@/i18n/types';
 import type { DeliveryKind } from '@/config';
 import {
@@ -70,6 +71,16 @@ export interface ScannedScene {
   lastPsdAt: Date | null;
   /** имя привязанной папки в 04_PSD — оно может отличаться от имени сцены */
   psdFolder: string | null;
+  /** подпапки-этапы внутри папки PSD */
+  psdStages: SceneVersion[];
+  /** сколько кадров этой сцены запланировано в таблице клиента */
+  plannedTotal: number;
+  /** сколько кадров плана нашлось по точному имени файла */
+  plannedMatched: number;
+  /** имена из плана, которых нет на диске */
+  plannedMissing: string[];
+  /** заголовки групп таблицы, отнесённых к сцене */
+  plannedGroups: string[];
   phase: ScenePhase;
   versions: SceneVersion[];
   maxVersion: string | null;
@@ -167,6 +178,8 @@ function summarizeFolder(dir: string, depth = 0): FolderSummary {
 
 interface ImageScan {
   count: number;
+  /** имена засчитанных файлов — по ним сверяемся с планом из таблицы клиента */
+  names: string[];
   newest: Date | null;
   coverPath: string | null;
   /** файлы с рендерным расширением, не прошедшие порог размера */
@@ -182,7 +195,7 @@ interface ImageScan {
  * сцена с восемью итерациями весит как восемь сцен.
  */
 function scanImages(dir: string): ImageScan {
-  const out: ImageScan = { count: 0, newest: null, coverPath: null, rejected: 0 };
+  const out: ImageScan = { count: 0, names: [], newest: null, coverPath: null, rejected: 0 };
 
   let entries: fs.Dirent[];
   try {
@@ -210,6 +223,7 @@ function scanImages(dir: string): ImageScan {
     }
 
     out.count++;
+    out.names.push(e.name);
     if (!out.newest || stat.mtime > out.newest) {
       out.newest = stat.mtime;
       out.coverPath = full;
@@ -220,26 +234,32 @@ function scanImages(dir: string): ImageScan {
 }
 
 /**
- * Файлы постобработки. Считаем .psd на любой глубине: внутри папки сцены
- * встречаются подпапки с версиями, а порог размера тут не нужен —
- * маленьких psd не бывает, зато бывают заготовки без слоёв.
+ * Файлы постобработки в КОРНЕ папки сцены — то же правило, что и для JPG.
+ *
+ * Внутри лежат подпапки этапов: у Scene_1 это «01 02 03 04», у Studio ещё
+ * и «BB», «SFACB», «JPEG». Складывать их вместе бессмысленно: получалось
+ * «PSD 126» при 16 готовых картинках, потому что суммировались все прошлые
+ * проходы. Этапы возвращаем отдельно, как versions у JPG.
  */
-function countPsd(dir: string, depth = 0): { count: number; newest: Date | null } {
-  if (depth > CONFIG.outboxScanDepth) return { count: 0, newest: null };
+function countPsd(dir: string): {
+  count: number;
+  newest: Date | null;
+  stages: SceneVersion[];
+} {
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(dir, { withFileTypes: true });
   } catch {
-    return { count: 0, newest: null };
+    return { count: 0, newest: null, stages: [] };
   }
   let count = 0;
   let newest: Date | null = null;
+  const stages: SceneVersion[] = [];
   for (const e of entries) {
     const full = path.join(dir, e.name);
     if (e.isDirectory()) {
-      const nested = countPsd(full, depth + 1);
-      count += nested.count;
-      if (nested.newest && (!newest || nested.newest > newest)) newest = nested.newest;
+      const nested = countPsdFlat(full);
+      if (nested > 0) stages.push({ name: e.name, imageCount: nested });
       continue;
     }
     if (!/\.psd$/i.test(e.name)) continue;
@@ -251,7 +271,18 @@ function countPsd(dir: string, depth = 0): { count: number; newest: Date | null 
       /* файл исчез между readdir и stat */
     }
   }
-  return { count, newest };
+  return { count, newest, stages };
+}
+
+/** Сколько psd лежит внутри подпапки-этапа — только для показа, не для прогресса */
+function countPsdFlat(dir: string): number {
+  try {
+    return fs
+      .readdirSync(dir, { withFileTypes: true })
+      .filter((e) => !e.isDirectory() && /.psd$/i.test(e.name)).length;
+  } catch {
+    return 0;
+  }
 }
 
 /** Суммарный вес папки. Дорого (полный обход) — только для отчёта по месту. */
@@ -321,6 +352,8 @@ export function scanProject(root: string, folderName: string, withSizes = false)
   // Сцена может существовать только в EXR — рендер уже посчитан фермой,
   // но человек ещё не сконвертировал его в JPG. Такую сцену терять нельзя.
   const scenes: ScannedScene[] = [];
+  /** имена реальных файлов по сценам — основа сверки с планом */
+  const namesByScene = new Map<string, string[]>();
   const jpgPath = path.join(projectPath, '04_JPG');
   const exrPath = path.join(projectPath, '04_EXR');
   const psdPath = path.join(projectPath, '04_PSD');
@@ -363,7 +396,7 @@ export function scanProject(root: string, folderName: string, withSizes = false)
       const psdFolder = psdForScene.get(name) ?? null;
       const psd = psdFolder
         ? countPsd(path.join(psdPath, psdFolder))
-        : { count: 0, newest: null };
+        : { count: 0, newest: null, stages: [] as SceneVersion[] };
 
       const subDirs = listDirs(scenePath);
       const versionNames = sortVersions(subDirs.filter((v) => /^\d{1,3}$/.test(v)));
@@ -386,6 +419,8 @@ export function scanProject(root: string, folderName: string, withSizes = false)
         anomalies.push({ code: 'anomaly.sceneRejectedFiles', params: { name, count: img.rejected } });
       }
 
+      namesByScene.set(name, img.names);
+
       scenes.push({
         name,
         skus: parsed.skus,
@@ -396,7 +431,12 @@ export function scanProject(root: string, folderName: string, withSizes = false)
         lastExrAt: exr.newest,
         psdCount: psd.count,
         lastPsdAt: psd.newest,
+        psdStages: psd.stages,
         psdFolder,
+        plannedTotal: 0,
+        plannedMatched: 0,
+        plannedMissing: [],
+        plannedGroups: [],
         phase:
           psd.count > 0
             ? 'POST'
@@ -412,6 +452,21 @@ export function scanProject(root: string, folderName: string, withSizes = false)
         hasUnrecognizedFiles: img.count === 0 && img.rejected > 0,
       });
     }
+  }
+
+  // ── План рендеров из сводной таблицы клиента
+  const planFile = findPlanFile(path.join(projectPath, '01_Clients'));
+  const plans: Map<string, ScenePlan> = planFile
+    ? assignPlans(parsePlan(planFile), namesByScene)
+    : new Map();
+
+  for (const scene of scenes) {
+    const plan = plans.get(scene.name);
+    if (!plan) continue;
+    scene.plannedTotal = plan.total;
+    scene.plannedMatched = plan.matched;
+    scene.plannedMissing = plan.missing;
+    scene.plannedGroups = plan.groups;
   }
 
   // ── 01_Clients: сигналы правок от клиента

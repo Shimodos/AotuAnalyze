@@ -25,7 +25,7 @@ export function Board() {
   const queryClient = useQueryClient();
   const [showArchive, setShowArchive] = useState(false);
   const [openKey, setOpenKey] = useState<string | null>(null);
-  const { openFolder, notice, dismissNotice } = useOpenFolder();
+  const { openFolder, copyLink, notice, dismissNotice } = useOpenFolder();
   const { t, lang, setLang } = useI18n();
   const { theme, toggleTheme } = useTheme();
   const edge = useEdgeScroll<HTMLDivElement>();
@@ -169,6 +169,7 @@ export function Board() {
                       thresholds={data?.thresholds ?? { warn: 5, alert: 14 }}
                       onOpen={() => setOpenKey(card.key)}
                       onOpenFolder={openFolder}
+                      onCopyLink={copyLink}
                     />
                   ))}
                   {cards.length === 0 && <div className={styles.columnEmpty}>{t('board.columnEmpty')}</div>}
@@ -196,6 +197,7 @@ export function Board() {
           projectKey={openKey}
           onClose={() => setOpenKey(null)}
           onOpenFolder={openFolder}
+          onCopyLink={copyLink}
         />
       )}
     </div>

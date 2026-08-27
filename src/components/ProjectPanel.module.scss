@@ -279,6 +279,48 @@
   }
 }
 
+// Обёртка «папка + ссылка». Без неё кнопка ссылки уезжает: в .kv и .sceneHead
+// строка выровнена по краям, а .delivery — вертикальная колонка.
+.pathRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+// В строке «Папка» блок прижат вправо, как раньше был сам путь
+.kv .pathRow {
+  flex: 1;
+  justify-content: flex-end;
+}
+
+// Имя сцены больше не растягивается на всю строку — растягивается обёртка,
+// иначе ссылка отъехала бы от папки к плану
+.sceneHead .pathRow {
+  flex: 1;
+}
+
+.sceneHead .sceneName {
+  flex: 0 1 auto;
+}
+
+.linkButton {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  padding: 2px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--muted);
+  transition: color 0.15s ease, background 0.15s ease;
+
+  &:hover {
+    color: var(--accent);
+    background: var(--chip-muted-bg);
+  }
+}
+
 .pathButton svg,
 .sceneName svg,
 .deliveryName svg,
@@ -479,4 +521,133 @@
     background: var(--ok-soft);
     color: var(--ok);
   }
+}
+
+// ── План из таблицы клиента
+// ── План кадров: главное число строки сцены
+.planBig,
+.planBigDone,
+.planBigNone {
+  flex: none;
+  font-size: 15px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  letter-spacing: -0.01em;
+}
+
+.planBig {
+  color: var(--text);
+}
+
+.planBigDone {
+  color: var(--ok);
+}
+
+// Плана нет — показываем просто число готовых кадров, приглушённо
+.planBigNone {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.planBar {
+  height: 4px;
+  margin-top: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--track);
+  overflow: hidden;
+
+  span {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+    transition: width 0.2s ease;
+  }
+}
+
+.planFillDone {
+  background: var(--ok) !important;
+}
+
+.missing {
+  margin-top: 7px;
+  font-size: 12px;
+
+  summary {
+    cursor: pointer;
+    color: var(--warn);
+    user-select: none;
+  }
+}
+
+.missingItem {
+  padding: 2px 0 2px 14px;
+  color: var(--muted);
+  word-break: break-all;
+}
+
+// Имена разошлись с планом, но количество сошлось — это не нехватка
+.renamed {
+  color: var(--muted) !important;
+}
+
+// Подписанная дробь: «13 з 23 за планом» вместо голого «13 / 23»
+.planWrap {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  line-height: 1.15;
+}
+
+.planOf {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+// ── Расхождение с планом: ровно, меньше, больше
+.planRow {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.planBigShort {
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.planBigOver {
+  color: var(--warn);
+  font-size: 15px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.deltaShort,
+.deltaOver {
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: help;
+}
+
+.deltaShort {
+  background: var(--chip-bg);
+  color: var(--chip-text);
+}
+
+.deltaOver {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.planFillOver {
+  background: var(--warn) !important;
 }

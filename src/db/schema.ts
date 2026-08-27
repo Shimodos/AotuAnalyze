@@ -49,6 +49,9 @@ export const projects = sqliteTable(
     scenesRendering: integer('scenes_rendering').notNull().default(0),
     scenesConverted: integer('scenes_converted').notNull().default(0),
     scenesPost: integer('scenes_post').notNull().default(0),
+    /** план из сводной таблицы клиента */
+    plannedTotal: integer('planned_total').notNull().default(0),
+    plannedDone: integer('planned_done').notNull().default(0),
 
     isSettling: integer('is_settling', { mode: 'boolean' }).notNull().default(false),
     isArchived: integer('is_archived', { mode: 'boolean' }).notNull().default(false),
@@ -94,7 +97,12 @@ export const scenes = sqliteTable(
     psdCount: integer('psd_count').notNull().default(0),
     lastPsdAt: integer('last_psd_at', { mode: 'timestamp_ms' }),
     psdFolder: text('psd_folder'),
+    psdStages: text('psd_stages', { mode: 'json' }).$type<Array<{ name: string; imageCount: number }>>(),
     phase: text('phase').notNull().default('EMPTY'),
+    plannedTotal: integer('planned_total').notNull().default(0),
+    plannedMatched: integer('planned_matched').notNull().default(0),
+    plannedMissing: text('planned_missing', { mode: 'json' }).$type<string[]>(),
+    plannedGroups: text('planned_groups', { mode: 'json' }).$type<string[]>(),
     versions: text('versions', { mode: 'json' }).$type<Array<{ name: string; imageCount: number }>>(),
     maxVersion: text('max_version'),
     lastImageAt: integer('last_image_at', { mode: 'timestamp_ms' }),

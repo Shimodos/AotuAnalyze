@@ -125,5 +125,22 @@
   "phase.POST": "post-production",
   "change.psdAdded": "PSD added: {n} ({total} total)",
   "change.psdRemoved": "PSD removed: {n} ({total} left)",
-  "change.psdReplaced": "PSD overwritten, {total} total"
+  "change.psdReplaced": "PSD overwritten, {total} total",
+  "card.planned": "plan {done} of {total}",
+  "panel.planned": "plan {done} of {total}",
+  "panel.missing": "{count} frames missing",
+  "panel.planSource": "The plan comes from the client's spreadsheet in 01_Clients. File names are compared, so you see not just how many but exactly which frames are missing.",
+  "panel.serviceFolders": "service folders: {list}",
+  "panel.renamed": "{count} frames named differently from the plan",
+  "panel.planGroups": "plan: {list}",
+  "panel.ofPlan": "of {total} planned",
+  "panel.inFolder": "in folder",
+  "panel.short": "−{n}",
+  "panel.over": "+{n}",
+  "panel.shortHint": "{n} frames fewer than planned",
+  "panel.overHint": "{n} frames more than planned",
+  "panel.exact": "matches the plan",
+  "action.copyLink": "Copy Dropbox link",
+  "notice.linkCopied": "Link copied: {path}",
+  "notice.linkFailed": "Could not copy. Link: {path}"
 }

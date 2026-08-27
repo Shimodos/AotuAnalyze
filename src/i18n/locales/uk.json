@@ -125,5 +125,22 @@
   "phase.POST": "постобробка",
   "change.psdAdded": "додано PSD: {n} (стало {total})",
   "change.psdRemoved": "прибрано PSD: {n} (лишилось {total})",
-  "change.psdReplaced": "PSD перезаписано, всього: {total}"
+  "change.psdReplaced": "PSD перезаписано, всього: {total}",
+  "card.planned": "за планом {done} з {total}",
+  "panel.planned": "план {done} з {total}",
+  "panel.missing": "не вистачає {count} кадрів",
+  "panel.planSource": "План береться зі зведеної таблиці клієнта в 01_Clients. Порівнюються імена файлів, тому видно не тільки скільки, а й яких саме кадрів немає.",
+  "panel.serviceFolders": "службові теки: {list}",
+  "panel.renamed": "{count} кадрів названо інакше, ніж у плані",
+  "panel.planGroups": "план: {list}",
+  "panel.ofPlan": "з {total} за планом",
+  "panel.inFolder": "у теці",
+  "panel.short": "−{n}",
+  "panel.over": "+{n}",
+  "panel.shortHint": "на {n} кадрів менше плану",
+  "panel.overHint": "на {n} кадрів більше плану",
+  "panel.exact": "збігається з планом",
+  "action.copyLink": "Скопіювати посилання на Dropbox",
+  "notice.linkCopied": "Посилання скопійовано: {path}",
+  "notice.linkFailed": "Не вдалося скопіювати. Посилання: {path}"
 }

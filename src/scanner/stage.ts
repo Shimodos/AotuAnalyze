@@ -46,6 +46,12 @@ export interface StageResult {
   scenesRendering: number;
   scenesConverted: number;
   scenesPost: number;
+  /** кадров запланировано таблицей клиента и сколько из них уже есть */
+  plannedTotal: number;
+  /** сколько картинок лежит в 04_JPG у сцен с планом */
+  plannedDone: number;
+  /** сколько кадров совпало с планом по именам файлов */
+  plannedByName: number;
   /** внутри проекта что-то менялось прямо сейчас — переход ещё не устоялся */
   isSettling: boolean;
   /** Финал, который давно никто не трогал */
@@ -79,6 +85,15 @@ export function computeStage(project: ScannedProject, now: Date = new Date()): S
   const lastPsdAt = psdTimes.length
     ? new Date(Math.max(...psdTimes.map((d) => d.getTime())))
     : null;
+
+  const plannedTotal = realScenes.reduce((sum, s) => sum + s.plannedTotal, 0);
+  // «Сделано» — это сколько картинок реально лежит в 04_JPG у сцен, где план
+  // задан. Сверка по именам файлов остаётся, но отдельно: она отвечает на другой
+  // вопрос — каких именно кадров не хватает.
+  const plannedDone = realScenes
+    .filter((s) => s.plannedTotal > 0)
+    .reduce((sum, s) => sum + s.imageCount, 0);
+  const plannedByName = realScenes.reduce((sum, s) => sum + s.plannedMatched, 0);
 
   const scenesRendering = realScenes.filter((s) => s.phase === 'RENDERING').length;
   const scenesConverted = realScenes.filter((s) => s.phase === 'CONVERTED').length;
@@ -217,6 +232,9 @@ export function computeStage(project: ScannedProject, now: Date = new Date()): S
     scenesRendering,
     scenesConverted,
     scenesPost,
+    plannedTotal,
+    plannedDone,
+    plannedByName,
     isSettling: minutesSinceActivity < CONFIG.debounceMinutes,
     isArchived: column === 'FINAL' && daysSinceActivity > CONFIG.archiveAfterDays,
     hasClientFeedback: project.clientFeedbackFolders.length > 0,
