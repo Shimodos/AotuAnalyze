@@ -3,7 +3,19 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { BoardCard } from '@/app/api/board/route';
 import { useI18n } from '@/i18n';
-import { Activity, Clock, FolderOpen, ICON, ICON_SM, Link2, Pin, Send, TriangleAlert, Users } from './icons';
+import {
+  Activity,
+  Clock,
+  FolderOpen,
+  ICON,
+  ICON_SM,
+  Info,
+  Link2,
+  Pin,
+  Send,
+  TriangleAlert,
+  Users,
+} from './icons';
 import styles from './Card.module.scss';
 
 interface Props {
@@ -50,8 +62,22 @@ export function Card({ card, thresholds, onOpen, onOpenFolder, onCopyLink }: Pro
       ? Math.round((card.scenesRendered / card.scenesTotal) * 100)
       : null;
 
+  // Карточка «поднимается» только когда есть повод: непросмотренные изменения
+  // или просроченная стадия. Остальные лежат плоско и не спорят за внимание.
+  const needsAttention =
+    card.unseenChanges > 0 ||
+    card.farmActive ||
+    (card.daysInStage !== null && card.daysInStage >= thresholds.warn);
+
+  // Расхождение с закреплённой колонкой — не метка, а объяснение,
+  // почему карточка стоит не там, где её посчитал скан
+  const note =
+    card.isPinned && card.actualColumn !== card.column
+      ? t('card.actually', { column: t(`column.${card.actualColumn}`) })
+      : null;
+
   return (
-    <article className={styles.card} onClick={onOpen}>
+    <article className={needsAttention ? styles.card : styles.cardCalm} onClick={onOpen}>
       {card.hasCover && (
         // обычный img, а не next/image: файлы лежат вне public и отдаются роутом
         // eslint-disable-next-line @next/next/no-img-element
@@ -64,12 +90,26 @@ export function Card({ card, thresholds, onOpen, onOpenFolder, onCopyLink }: Pro
       )}
 
       <div className={styles.body}>
-        <div className={styles.topRow}>
-          <span className={styles.job}>{card.jobNumber ?? '—'}</span>
+        <div className={styles.head}>
+          <span className={card.farmActive ? `${styles.avatar} ${styles.avatarLive}` : styles.avatar}>
+            {card.jobNumber ?? '—'}
+          </span>
+
+          <div className={styles.headText}>
+            <h3 className={styles.title}>{card.title}</h3>
+            <span className={styles.sub}>
+              {hasPlan
+                ? t('card.planShort', { done: card.plannedDone, total: card.plannedTotal })
+                : card.scenesTotal > 0
+                  ? t('card.scenesShort', { total: card.scenesTotal })
+                  : t('card.noScenes')}
+            </span>
+          </div>
+
           <span className={styles.actions}>
             <button
               className={styles.iconButton}
-              title={`Открыть папку проекта\n${card.path}`}
+              title={`${t('card.openFolder')}\n${card.path}`}
               onClick={(e) => {
                 e.stopPropagation();
                 onOpenFolder(card.path);
@@ -91,9 +131,7 @@ export function Card({ card, thresholds, onOpen, onOpenFolder, onCopyLink }: Pro
             )}
             <button
               className={card.isPinned ? styles.pinActive : styles.iconButton}
-              title={
-                card.isPinned ? t('card.unpin') : t('card.pin')
-              }
+              title={card.isPinned ? t('card.unpin') : t('card.pin')}
               onClick={(e) => {
                 e.stopPropagation();
                 pin.mutate();
@@ -103,8 +141,6 @@ export function Card({ card, thresholds, onOpen, onOpenFolder, onCopyLink }: Pro
             </button>
           </span>
         </div>
-
-        <h3 className={styles.title}>{card.title}</h3>
 
         {progress !== null && (
           <div className={styles.progressBlock}>
@@ -116,6 +152,15 @@ export function Card({ card, thresholds, onOpen, onOpenFolder, onCopyLink }: Pro
                 ? t('card.planned', { done: card.plannedDone, total: card.plannedTotal })
                 : t('card.scenes', { done: card.scenesRendered, total: card.scenesTotal })}
             </span>
+          </div>
+        )}
+
+        {/* Закреплённая карточка не должна молча врать: если скан насчитал
+            другую колонку, показываем это прямо на карточке */}
+        {note && (
+          <div className={styles.note}>
+            <Info {...ICON_SM} />
+            <span>{note}</span>
           </div>
         )}
 
@@ -143,14 +188,6 @@ export function Card({ card, thresholds, onOpen, onOpenFolder, onCopyLink }: Pro
           {card.maxRound !== null && card.maxRound >= 4 && (
             <span className={styles.badgeWarn}>
               <TriangleAlert {...ICON_SM} /> {t('card.totalRounds', { n: card.maxRound })}
-            </span>
-          )}
-          {/* Закреплённая карточка не должна молча врать: если скан насчитал
-              другую колонку, показываем это прямо на карточке */}
-          {card.isPinned && card.actualColumn !== card.column && (
-            <span className={styles.badgeWarn}>
-              <TriangleAlert {...ICON_SM} />{' '}
-              {t('card.actually', { column: t(`column.${card.actualColumn}`) })}
             </span>
           )}
           {/* Ферма может работать параллельно с постобработкой, поэтому
