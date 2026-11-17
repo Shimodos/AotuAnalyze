@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
-import { desc, eq, sql } from 'drizzle-orm';
-import { COLUMNS, CONFIG, type Column } from '@/config';
+import { desc, eq, isNotNull, sql } from 'drizzle-orm';
+import { COLUMNS, CONFIG, type Ball, type Column } from '@/config';
 import { getDb, schema } from '@/db';
 import { folderWebUrl } from '@/dropbox/webUrl';
-import type { Localized } from '@/i18n/types';
-import { syncOnce } from '@/sync/sync';
+import { errorMessage, jsonError } from '@/server/http';
+import { scanIfStale } from '@/sync/launch';
+import { findRunningScan } from '@/sync/sync';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,7 +13,6 @@ export interface BoardCard {
   key: string;
   jobNumber: number | null;
   title: string;
-  folderName: string;
   path: string;
   /** ссылка на эту папку в веб-версии Dropbox */
   webUrl: string | null;
@@ -20,11 +20,9 @@ export interface BoardCard {
   column: Column;
   /** что насчитал скан на самом деле — расходится с column только под пином */
   actualColumn: Column;
-  ball: string;
-  deliveryKind: string | null;
+  ball: Ball;
   round: number | null;
   maxRound: number | null;
-  evidence: Localized;
   scenesTotal: number;
   scenesRendered: number;
   /** сырых EXR — ферма считает прямо сейчас */
@@ -39,7 +37,6 @@ export interface BoardCard {
   plannedTotal: number;
   plannedDone: number;
   daysInStage: number | null;
-  daysSinceActivity: number | null;
   isSettling: boolean;
   isArchived: boolean;
   isPinned: boolean;
@@ -56,49 +53,28 @@ function days(from: Date | null): number | null {
   return Math.floor((Date.now() - from.getTime()) / 86_400_000);
 }
 
-export async function GET() {
-  try {
-    refreshIfStale();
-    return NextResponse.json(buildBoard());
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+export interface BoardData {
+  cards: BoardCard[];
+  thresholds: { warn: number; alert: number };
+  lastScan: { at: number | null; durationMs: number | null; projectCount: number | null } | null;
+  /** скан идёт прямо сейчас — доска опрашивает чаще, кнопка заблокирована */
+  scanning: boolean;
 }
 
 /**
- * Скан по запросу доски, если данные устарели.
- *
- * Надёжнее фонового таймера: роут пересобирается на каждый запрос, поэтому здесь
- * всегда свежий код — таймер же держит модуль с момента старта сервера и в dev
- * молча крутит устаревшую логику. Плюс скан идёт только когда на доску кто-то
- * смотрит, а не круглосуточно.
+ * Доска отдаёт то, что есть, а если данные устарели — запускает скан в фоне
+ * (см. sync/launch.ts). Свежие данные подхватит следующий опрос.
  */
-function refreshIfStale() {
-  const db = getDb();
-  const last = db
-    .select({ startedAt: schema.scanRuns.startedAt, finishedAt: schema.scanRuns.finishedAt })
-    .from(schema.scanRuns)
-    .orderBy(desc(schema.scanRuns.id))
-    .limit(1)
-    .get();
-
-  // У идущего скана finishedAt ещё null — считаем возраст от начала,
-  // иначе каждый параллельный запрос впустую пытается запустить свой скан.
-  const stamp = last?.finishedAt ?? last?.startedAt ?? null;
-  const age = stamp ? Date.now() - stamp.getTime() : Number.POSITIVE_INFINITY;
-  if (age < CONFIG.boardRefreshMs) return;
-
+export async function GET() {
   try {
-    syncOnce();
+    scanIfStale();
+    return NextResponse.json(buildBoard());
   } catch (error) {
-    // «Скан уже идёт» — параллельный запрос успел раньше, отдаём что есть
-    const message = error instanceof Error ? error.message : String(error);
-    if (message !== 'Скан уже идёт') console.error('[tracker] скан при загрузке доски:', message);
+    return jsonError(errorMessage(error), 500);
   }
 }
 
-function buildBoard() {
+function buildBoard(): BoardData {
   const db = getDb();
   const rows = db.select().from(schema.projects).all();
 
@@ -112,9 +88,12 @@ function buildBoard() {
     .all()) {
     unseen.set(row.key, Number(row.n));
   }
+  // Последний завершённый: идущий скан теперь тоже лежит в scan_runs,
+  // а подпись «последний скан» должна показывать реальные данные, а не пустоту
   const lastRun = db
     .select()
     .from(schema.scanRuns)
+    .where(isNotNull(schema.scanRuns.finishedAt))
     .orderBy(desc(schema.scanRuns.id))
     .limit(1)
     .get();
@@ -123,16 +102,13 @@ function buildBoard() {
     key: r.key,
     jobNumber: r.jobNumber,
     title: r.title,
-    folderName: r.folderName,
     path: r.path,
     webUrl: folderWebUrl(r.path),
-    column: (r.isPinned && r.pinnedColumn ? r.pinnedColumn : r.column) as Column,
-    actualColumn: r.column as Column,
+    column: r.isPinned && r.pinnedColumn ? r.pinnedColumn : r.column,
+    actualColumn: r.column,
     ball: r.ball,
-    deliveryKind: r.deliveryKind,
     round: r.round,
     maxRound: r.maxRound,
-    evidence: { code: r.evidence, params: r.evidenceParams ?? undefined },
     scenesTotal: r.scenesTotal,
     scenesRendered: r.scenesRendered,
     exrTotal: r.exrTotal,
@@ -143,7 +119,6 @@ function buildBoard() {
     plannedTotal: r.plannedTotal,
     plannedDone: r.plannedDone,
     daysInStage: days(r.stageSince),
-    daysSinceActivity: days(r.lastActivityAt),
     isSettling: r.isSettling,
     isArchived: r.isArchived,
     isPinned: r.isPinned,
@@ -157,7 +132,6 @@ function buildBoard() {
   cards.sort((a, b) => (b.jobNumber ?? 0) - (a.jobNumber ?? 0));
 
   return {
-    columns: COLUMNS,
     cards,
     thresholds: { warn: CONFIG.staleWarnDays, alert: CONFIG.staleAlertDays },
     lastScan: lastRun
@@ -167,5 +141,6 @@ function buildBoard() {
           projectCount: lastRun.projectCount,
         }
       : null,
+    scanning: findRunningScan() !== null,
   };
 }

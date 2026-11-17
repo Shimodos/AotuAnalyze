@@ -33,7 +33,7 @@ export function useOpenFolder() {
         return;
       }
 
-      if (payload?.error === 'remote') {
+      if (payload?.code === 'remote') {
         const copied = await copyToClipboard(payload.path);
         setNotice({
           kind: 'info',

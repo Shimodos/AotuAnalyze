@@ -11,15 +11,16 @@
 
 import * as path from 'node:path';
 import { CONFIG } from '@/config';
+import { isInsideRoot } from '@/server/paths';
 
 const WEB_ROOT = 'https://www.dropbox.com/home';
 
 /** Путь относительно корня Dropbox, с прямыми слэшами и без ведущего */
 function relativeToRoot(localPath: string): string | null {
   const resolved = path.resolve(localPath);
+  if (!isInsideRoot(resolved)) return null;
   const root = path.resolve(CONFIG.root);
   if (resolved === root) return '';
-  if (!resolved.startsWith(root + path.sep)) return null;
   return resolved.slice(root.length + 1).split(path.sep).join('/');
 }
 

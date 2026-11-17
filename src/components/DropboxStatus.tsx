@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useI18n } from '@/i18n';
+import { fetchJson } from './fetchJson';
 import { Cloud, CloudOff, ICON } from './icons';
 import styles from './Board.module.scss';
 
@@ -18,17 +19,11 @@ export function DropboxStatus() {
 
   const { data } = useQuery<Status>({
     queryKey: ['dropbox-status'],
-    queryFn: async () => {
-      const res = await fetch('/api/dropbox/status');
-      if (!res.ok) throw new Error('status');
-      return res.json();
-    },
+    queryFn: () => fetchJson<Status>('/api/dropbox/status'),
   });
 
   const disconnect = useMutation({
-    mutationFn: async () => {
-      await fetch('/api/dropbox/disconnect', { method: 'POST' });
-    },
+    mutationFn: () => fetchJson<{ ok: true }>('/api/dropbox/disconnect', { method: 'POST' }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['dropbox-status'] }),
   });
 

@@ -2,11 +2,12 @@
  * Скан -> БД. Здесь появляется то, чего нет в файловой системе: история переходов.
  */
 
-import { eq } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 import { CONFIG, type Column } from '@/config';
 import { getDb, schema } from '@/db';
 import { scanAll, type ScannedProject } from '@/scanner/scan';
 import { computeStage } from '@/scanner/stage';
+import { SqliteCache } from './cache';
 import { diffDeliveries, diffScenes } from './diff';
 import { recordChange } from './record';
 
@@ -29,34 +30,60 @@ export interface SyncResult {
  * только 05_Outbox — без этого запасного источника 17 из 29 карточек остаются
  * без превью, хотя отгруженные картинки лежат на диске.
  */
-function pickCover(project: ScannedProject): string | null {
-  let best: { at: number; path: string } | null = null;
+function pickCover(project: ScannedProject): { path: string; at: Date } | null {
+  let best: { at: Date; path: string } | null = null;
   for (const s of project.scenes) {
     if (!s.coverPath || !s.lastImageAt) continue;
-    const at = s.lastImageAt.getTime();
-    if (!best || at > best.at) best = { at, path: s.coverPath };
+    if (!best || s.lastImageAt > best.at) best = { at: s.lastImageAt, path: s.coverPath };
   }
-  if (best) return best.path;
+  if (best) return best;
 
   for (const d of project.deliveries) {
     if (d.isJunk || !d.coverPath || !d.coverAt) continue;
-    const at = d.coverAt.getTime();
-    if (!best || at > best.at) best = { at, path: d.coverPath };
+    if (!best || d.coverAt > best.at) best = { at: d.coverAt, path: d.coverPath };
   }
-  return best?.path ?? null;
+  return best;
 }
 
 /**
- * Скан синхронный и держит транзакцию на запись. Если ручной запуск из UI
- * совпадёт с фоновым тиком, второй должен отступить, а не биться за блокировку.
+ * Скан синхронный и держит транзакцию на запись. Второй вызов в том же
+ * процессе должен отступить, а не биться за блокировку; про другие процессы
+ * знает findRunningScan().
  */
 let scanInProgress = false;
 
-export function isScanInProgress(): boolean {
-  return scanInProgress;
+/**
+ * Скан, который идёт прямо сейчас — в любом процессе, не только в этом.
+ *
+ * Флаг выше видит только свой процесс, а доска запускает скан отдельным
+ * процессом, и CLI тоже пишет в ту же базу. Общий признак один: запись
+ * в scan_runs без finishedAt. Слишком старую такую запись считаем мёртвой
+ * (процесс убили), иначе она навсегда запретила бы новые сканы.
+ */
+export function findRunningScan(): { id: number; startedAt: Date } | null {
+  const last = getDb()
+    .select({
+      id: schema.scanRuns.id,
+      startedAt: schema.scanRuns.startedAt,
+      finishedAt: schema.scanRuns.finishedAt,
+    })
+    .from(schema.scanRuns)
+    .orderBy(desc(schema.scanRuns.id))
+    .limit(1)
+    .get();
+  if (!last || last.finishedAt) return null;
+  if (Date.now() - last.startedAt.getTime() > CONFIG.scanRunTimeoutMs) return null;
+  return { id: last.id, startedAt: last.startedAt };
 }
 
-export function syncOnce(options: { root?: string; withSizes?: boolean } = {}): SyncResult {
+export interface SyncOptions {
+  root?: string;
+  withSizes?: boolean;
+  /** запись в scan_runs уже создал тот, кто нас запустил (sync/launch.ts) */
+  runId?: number;
+}
+
+export function syncOnce(options: SyncOptions = {}): SyncResult {
   if (scanInProgress) throw new Error('Скан уже идёт');
   scanInProgress = true;
   try {
@@ -66,16 +93,44 @@ export function syncOnce(options: { root?: string; withSizes?: boolean } = {}): 
   }
 }
 
-function runSync(options: { root?: string; withSizes?: boolean }): SyncResult {
+function runSync(options: SyncOptions): SyncResult {
   const db = getDb();
   const startedAt = new Date();
-  const scanned = scanAll(options.root ?? CONFIG.root, options.withSizes ?? false);
 
-  const [run] = db
-    .insert(schema.scanRuns)
-    .values({ startedAt, withSizes: options.withSizes ?? false })
-    .returning({ id: schema.scanRuns.id })
-    .all();
+  // Запись создаём ДО обхода: пока он идёт, доска и второй процесс видят
+  // startedAt без finishedAt и не запускают свой скан параллельно.
+  // Фоновый запуск создаёт её ещё раньше — в родительском процессе.
+  const run =
+    options.runId !== undefined
+      ? { id: options.runId }
+      : db
+          .insert(schema.scanRuns)
+          .values({ startedAt, withSizes: options.withSizes ?? false })
+          .returning({ id: schema.scanRuns.id })
+          .get();
+
+  // Кеш переживает процесс скана: сводки отгрузок и разобранные xlsx-планы
+  // лежат в SQLite и считаются заново только когда источник изменился
+  const cache = new SqliteCache();
+
+  let scanned: ScannedProject[];
+  try {
+    scanned = scanAll(options.root ?? CONFIG.root, options.withSizes ?? false, cache);
+  } catch (error) {
+    // Упавший скан тоже закрываем: иначе запись висит «идущей», а доска
+    // после диска, который отвалился, не сможет ни отступить, ни повторить.
+    db.update(schema.scanRuns)
+      .set({
+        finishedAt: new Date(),
+        durationMs: Date.now() - startedAt.getTime(),
+        error: error instanceof Error ? error.message : String(error),
+      })
+      .where(eq(schema.scanRuns.id, run.id))
+      .run();
+    throw error;
+  }
+
+  cache.flush();
 
   const transitions: SyncResult['transitions'] = [];
   const released: SyncResult['released'] = [];
@@ -84,16 +139,17 @@ function runSync(options: { root?: string; withSizes?: boolean }): SyncResult {
   const now = new Date();
 
   db.transaction((tx) => {
+    // Все проекты одним запросом, а не по одному на каждый
+    const existingByKey = new Map(
+      tx.select().from(schema.projects).all().map((row) => [row.key, row] as const),
+    );
+
     for (const project of scanned) {
       const stage = computeStage(project, now);
-      const existing = tx
-        .select()
-        .from(schema.projects)
-        .where(eq(schema.projects.key, project.key))
-        .get();
+      const existing = existingByKey.get(project.key);
 
       let stageSince = existing?.stageSince ?? stage.lastActivityAt ?? now;
-      const previousColumn = (existing?.column ?? null) as Column | null;
+      const previousColumn: Column | null = existing?.column ?? null;
 
       if (stage.isSettling) settling.push(project.folderName);
 
@@ -154,6 +210,7 @@ function runSync(options: { root?: string; withSizes?: boolean }): SyncResult {
         }
       }
 
+      const cover = pickCover(project);
       const values = {
         key: project.key,
         folderName: project.folderName,
@@ -190,7 +247,8 @@ function runSync(options: { root?: string; withSizes?: boolean }): SyncResult {
         isPinned,
         pinnedColumn,
         pinnedAt,
-        coverPath: pickCover(project),
+        coverPath: cover?.path ?? null,
+        coverAt: cover?.at ?? null,
         missingFolders: project.missingFolders,
         anomalies: project.anomalies,
         // размер обновляем только когда его реально считали
@@ -226,51 +284,56 @@ function runSync(options: { root?: string; withSizes?: boolean }): SyncResult {
         changeCount += detected.length;
       }
 
-      // сцены и отгрузки — полная замена, они дёшевы и всегда отражают диск
+      // сцены и отгрузки — полная замена, они дёшевы и всегда отражают диск.
+      // Вставляем пачкой: drizzle готовит statement на каждый вызов, и
+      // по одной строке это в три раза дольше.
       tx.delete(schema.scenes).where(eq(schema.scenes.projectKey, project.key)).run();
-      for (const s of project.scenes) {
+      if (project.scenes.length > 0) {
         tx.insert(schema.scenes)
-          .values({
-            id: `${project.key}::${s.name}`,
-            projectKey: project.key,
-            name: s.name,
-            skus: s.skus,
-            sceneNumber: s.sceneNumber,
-            isService: s.isService,
-            imageCount: s.imageCount,
-            exrCount: s.exrCount,
-            lastExrAt: s.lastExrAt,
-            psdCount: s.psdCount,
-            lastPsdAt: s.lastPsdAt,
-            psdFolder: s.psdFolder,
-            psdStages: s.psdStages,
-            phase: s.phase,
-            plannedTotal: s.plannedTotal,
-            plannedMatched: s.plannedMatched,
-            plannedMissing: s.plannedMissing,
-            plannedGroups: s.plannedGroups,
-            versions: s.versions,
-            maxVersion: s.maxVersion,
-            lastImageAt: s.lastImageAt,
-            coverPath: s.coverPath,
-            hasUnrecognizedFiles: s.hasUnrecognizedFiles,
-          })
+          .values(
+            project.scenes.map((s) => ({
+              id: `${project.key}::${s.name}`,
+              projectKey: project.key,
+              name: s.name,
+              skus: s.skus,
+              sceneNumber: s.sceneNumber,
+              isService: s.isService,
+              imageCount: s.imageCount,
+              exrCount: s.exrCount,
+              lastExrAt: s.lastExrAt,
+              psdCount: s.psdCount,
+              lastPsdAt: s.lastPsdAt,
+              psdFolder: s.psdFolder,
+              psdStages: s.psdStages,
+              phase: s.phase,
+              plannedTotal: s.plannedTotal,
+              plannedMatched: s.plannedMatched,
+              plannedMissing: s.plannedMissing,
+              plannedGroups: s.plannedGroups,
+              versions: s.versions,
+              lastImageAt: s.lastImageAt,
+              coverPath: s.coverPath,
+              hasUnrecognizedFiles: s.hasUnrecognizedFiles,
+            })),
+          )
           .run();
       }
 
       tx.delete(schema.deliveries).where(eq(schema.deliveries.projectKey, project.key)).run();
-      for (const d of project.deliveries) {
+      if (project.deliveries.length > 0) {
         tx.insert(schema.deliveries)
-          .values({
-            id: `${project.key}::${d.folderName}`,
-            projectKey: project.key,
-            folderName: d.folderName,
-            kind: d.kind,
-            round: d.round,
-            isJunk: d.isJunk,
-            fileCount: d.fileCount,
-            sentAt: d.sentAt,
-          })
+          .values(
+            project.deliveries.map((d) => ({
+              id: `${project.key}::${d.folderName}`,
+              projectKey: project.key,
+              folderName: d.folderName,
+              kind: d.kind,
+              round: d.round,
+              isJunk: d.isJunk,
+              fileCount: d.fileCount,
+              sentAt: d.sentAt,
+            })),
+          )
           .run();
       }
     }
@@ -287,6 +350,10 @@ function runSync(options: { root?: string; withSizes?: boolean }): SyncResult {
     })
     .where(eq(schema.scanRuns.id, run.id))
     .run();
+
+  // Скан — главный писатель: полная замена сцен и отгрузок каждый раз.
+  // Без чекпойнта WAL-файл только растёт (наблюдали 4 МБ при базе в 300 КБ).
+  db.run(sql`PRAGMA wal_checkpoint(TRUNCATE)`);
 
   return { projectCount: scanned.length, durationMs, transitions, released, changeCount, settling };
 }

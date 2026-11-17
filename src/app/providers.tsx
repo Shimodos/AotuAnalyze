@@ -10,7 +10,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
     () =>
       new QueryClient({
         defaultOptions: {
-          queries: { refetchOnWindowFocus: true, staleTime: 10_000 },
+          // Без перезапроса по фокусу: каждый альт-таб дёргал /api/board,
+          // а тот при устаревших данных запускает обход всего Dropbox.
+          queries: { refetchOnWindowFocus: false, staleTime: 10_000 },
         },
       }),
   );

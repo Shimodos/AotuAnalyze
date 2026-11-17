@@ -2,74 +2,16 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useI18n, type Localized } from '@/i18n';
-import { Activity, ChevronDown, FolderOpen, ICON, ICON_SM, Link2, TriangleAlert, X } from './icons';
+import type { ProjectDetail } from '@/app/api/project/route';
+import { useI18n } from '@/i18n';
+import { fetchJson } from './fetchJson';
+import { Activity, ChevronDown, FolderOpen, ICON, ICON_SM, Link2, ListChecks, TriangleAlert, X } from './icons';
+import { SceneChecklist } from './SceneChecklist';
 import styles from './ProjectPanel.module.scss';
 
-interface Detail {
-  project: {
-    key: string;
-    title: string;
-    folderName: string;
-    path: string;
-    evidence: Localized;
-    anomalies: Array<Localized | string>;
-    missingFolders: string[];
-    lastDeliveryAt: number | null;
-    lastRenderAt: number | null;
-    sizeBytes: number | null;
-    webUrl: string | null;
-  };
-  scenes: Array<{
-    path: string;
-    name: string;
-    sceneNumber: string | null;
-    skus: string[];
-    isService: boolean;
-    imageCount: number;
-    exrCount: number;
-    lastExrAt: number | null;
-    psdCount: number;
-    psdFolder: string | null;
-    psdStages: Array<{ name: string; imageCount: number }>;
-    phase: string;
-    plannedTotal: number;
-    plannedMatched: number;
-    plannedMissing: string[];
-    plannedGroups: string[];
-    versions: Array<{ name: string; imageCount: number }>;
-    lastImageAt: number | null;
-    hasUnrecognizedFiles: boolean;
-    webUrl: string | null;
-  }>;
-  deliveries: Array<{
-    path: string;
-    folderName: string;
-    kind: string | null;
-    round: number | null;
-    isJunk: boolean;
-    fileCount: number;
-    sentAt: number | null;
-    webUrl: string | null;
-  }>;
-  changes: Array<{
-    area: string;
-    target: string;
-    kind: string;
-    params?: Record<string, string | number>;
-    times: number;
-    fileAt: number | null;
-    detectedAt: number;
-    isSeen: boolean;
-  }>;
-  events: Array<{
-    from: string | null;
-    to: string;
-    reason: string;
-    evidence: Localized | null;
-    at: number;
-  }>;
-}
+/** Сколько записей показываем в свёрнутом виде. Раньше свёрнутый вид показывал
+ *  все непросмотренные — и пока просмотренных не было, кнопка ничего не меняла. */
+const COLLAPSED_LIMIT = 3;
 
 /** Кнопка рядом с папкой: копирует ссылку на ту же папку в вебе Dropbox */
 function CopyLinkButton({ url, onCopyLink }: { url: string | null; onCopyLink: (u: string) => void }) {
@@ -91,49 +33,37 @@ interface Props {
 }
 
 export function ProjectPanel({ projectKey, onClose, onOpenFolder, onCopyLink }: Props) {
-  const { t, tl, lang } = useI18n();
+  const { t, tl, locale } = useI18n();
   const queryClient = useQueryClient();
   const [historyOpen, setHistoryOpen] = useState(false);
-  const locale = lang === 'uk' ? 'uk-UA' : 'en-US';
+  // Какая сцена открыта в чеклисте правок
+  const [checklistScene, setChecklistScene] = useState<string | null>(null);
   const fmt = (ms: number | null) => (ms ? new Date(ms).toLocaleDateString(locale) : '—');
 
-  const { data, isLoading, error } = useQuery<Detail>({
+  const { data, isLoading, error } = useQuery<ProjectDetail>({
     queryKey: ['project', projectKey],
-    queryFn: async () => {
-      const res = await fetch(`/api/project?key=${encodeURIComponent(projectKey)}`);
-      const payload = await res.json().catch(() => null);
-      if (!res.ok) {
-        throw new Error(payload?.error ?? `не удалось загрузить проект (HTTP ${res.status})`);
-      }
-      return payload;
-    },
+    queryFn: () =>
+      fetchJson<ProjectDetail>(`/api/project?key=${encodeURIComponent(projectKey)}`, undefined, (s) =>
+        t('error.project', { status: s }),
+      ),
   });
 
   // Карточку открыли — изменения считаем просмотренными, иначе счётчик вечный
   const markSeen = useMutation({
-    mutationFn: async () => {
-      await fetch('/api/changes/seen', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: projectKey }),
-      });
-    },
+    mutationFn: () => fetchJson<{ ok: true }>('/api/changes/seen', { json: { key: projectKey } }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['board'] }),
   });
 
   // Последнее изменение по каждой папке: нужно, чтобы показать отметку
   // прямо в строке сцены, а не только общим списком внизу.
   const latestByTarget = useMemo(() => {
-    const map = new Map<string, Detail['changes'][number]>();
+    const map = new Map<string, ProjectDetail['changes'][number]>();
     for (const change of data?.changes ?? []) {
       if (!map.has(change.target)) map.set(change.target, change); // changes уже отсортированы, свежие первыми
     }
     return map;
   }, [data]);
 
-// Сколько записей показываем в свёрнутом виде. Раньше свёрнутый вид показывал
-  // все непросмотренные — и пока просмотренных не было, кнопка ничего не меняла.
-  const COLLAPSED_LIMIT = 3;
   const allChanges = data?.changes ?? [];
   const collapsedChanges = allChanges.filter((c) => !c.isSeen).slice(0, COLLAPSED_LIMIT);
   const shownChanges = historyOpen ? allChanges : collapsedChanges;
@@ -164,7 +94,7 @@ export function ProjectPanel({ projectKey, onClose, onOpenFolder, onCopyLink }: 
         </header>
 
         {isLoading && <div className={styles.muted}>{t('panel.loading')}</div>}
-        {error && <div className={styles.failure}>{(error as Error).message}</div>}
+        {error && <div className={styles.failure}>{error.message}</div>}
 
         {data && (
           <div className={styles.content}>
@@ -174,7 +104,7 @@ export function ProjectPanel({ projectKey, onClose, onOpenFolder, onCopyLink }: 
                 <span className={styles.pathRow}>
                   <button
                     className={styles.pathButton}
-                    title={`Открыть в проводнике\n${data.project.path}`}
+                    title={`${t('panel.openProject')}\n${data.project.path}`}
                     onClick={() => onOpenFolder(data.project.path)}
                   >
                     <FolderOpen {...ICON_SM} /> {data.project.folderName}
@@ -197,7 +127,7 @@ export function ProjectPanel({ projectKey, onClose, onOpenFolder, onCopyLink }: 
               {data.project.sizeBytes !== null && (
                 <div className={styles.kv}>
                   <span>{t('panel.size')}</span>
-                  <b>{(data.project.sizeBytes / 1024 ** 3).toFixed(1)} ГБ</b>
+                  <b>{(data.project.sizeBytes / 1024 ** 3).toFixed(1)} {t('unit.gb')}</b>
                 </div>
               )}
             </section>
@@ -212,8 +142,8 @@ export function ProjectPanel({ projectKey, onClose, onOpenFolder, onCopyLink }: 
 
               {/* Новые изменения показываем сразу, старую историю прячем,
                   чтобы разворот карточки не превращался в простыню */}
-              {shownChanges.map((c, i) => (
-                <div key={i} className={c.isSeen ? styles.change : styles.changeFresh}>
+              {shownChanges.map((c) => (
+                <div key={c.id} className={c.isSeen ? styles.change : styles.changeFresh}>
                   <span className={styles.changeTarget}>{c.target}</span>
                   <span className={styles.changeText}>
                     {t(c.kind, c.params)}
@@ -251,7 +181,7 @@ export function ProjectPanel({ projectKey, onClose, onOpenFolder, onCopyLink }: 
                     <span className={styles.pathRow}>
                       <button
                         className={styles.sceneName}
-                        title={`Открыть папку сцены\n${s.path}`}
+                        title={`${t('panel.openScene')}\n${s.path}`}
                         onClick={() => onOpenFolder(s.path)}
                       >
                         <FolderOpen {...ICON_SM} /> {s.name}
@@ -325,6 +255,22 @@ export function ProjectPanel({ projectKey, onClose, onOpenFolder, onCopyLink }: 
                   )}
 
                   <div className={styles.sceneMeta}>
+                    {/* Чеклист правок. Всего кадров берём из imageCount, а не из
+                        отдельного запроса: это то же число, что в чипе JPG рядом,
+                        иначе строка спорила бы сама с собой. */}
+                    <button
+                      className={
+                        s.checkDone > 0 && s.checkDone >= s.imageCount
+                          ? styles.checksDone
+                          : s.checkDone > 0
+                            ? styles.checksSome
+                            : styles.checks
+                      }
+                      onClick={() => setChecklistScene(s.name)}
+                      title={t('checklist.hint')}
+                    >
+                      <ListChecks {...ICON_SM} /> {t('checklist.open')} {s.checkDone}/{s.imageCount}
+                    </button>
                     {/* EXR — сырьё с ферм, JPG — сконвертированное руками, PSD — постобработка */}
                     <span className={s.exrCount > 0 ? styles.countExr : styles.countZero}>
                       {t('panel.exr', { count: s.exrCount })}
@@ -420,7 +366,7 @@ export function ProjectPanel({ projectKey, onClose, onOpenFolder, onCopyLink }: 
                   <span className={styles.pathRow}>
                     <button
                       className={styles.deliveryName}
-                      title={`Открыть папку отгрузки\n${d.path}`}
+                      title={`${t('panel.openDelivery')}\n${d.path}`}
                       onClick={() => onOpenFolder(d.path)}
                     >
                       <FolderOpen {...ICON_SM} /> {d.folderName}
@@ -449,8 +395,8 @@ export function ProjectPanel({ projectKey, onClose, onOpenFolder, onCopyLink }: 
             {data.events.length > 0 && (
               <section className={styles.section}>
                 <h3 className={styles.h3}>{t('panel.history')}</h3>
-                {data.events.map((e, i) => (
-                  <div key={i} className={styles.event}>
+                {data.events.map((e) => (
+                  <div key={e.id} className={styles.event}>
                     <span>
                       {e.from ? t(`column.${e.from}`) : t('panel.newProject')} →{' '}
                       <b>{t(`column.${e.to}`)}</b>
@@ -477,6 +423,16 @@ export function ProjectPanel({ projectKey, onClose, onOpenFolder, onCopyLink }: 
           </div>
         )}
       </aside>
+
+      {/* Чеклист поверх панели: список кадров длинный, в узкой колонке он нечитаем */}
+      {checklistScene && (
+        <SceneChecklist
+          projectKey={projectKey}
+          sceneName={checklistScene}
+          onClose={() => setChecklistScene(null)}
+          onCopyLink={onCopyLink}
+        />
+      )}
     </div>
   );
 }

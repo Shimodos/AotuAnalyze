@@ -55,13 +55,43 @@ export const CONFIG = {
 
   /**
    * Насколько «свежими» считаются данные доски. Если последний скан старше —
-   * запрос /api/board пересканирует диск прежде чем ответить.
+   * запрос /api/board запускает скан в фоне и отдаёт то, что есть.
    *
-   * 15 минут: рендер пишется десятками минут, отгрузка собирается руками —
+   * 30 минут: рендер пишется десятками минут, отгрузка собирается руками —
    * минутная точность здесь не нужна. Если понадобилось прямо сейчас,
    * есть кнопка «Сканувати», она игнорирует этот порог.
    */
-  boardRefreshMs: Number(process.env.VIARDE_BOARD_REFRESH_MS ?? 10 * 60_000),
+  boardRefreshMs: Number(process.env.VIARDE_BOARD_REFRESH_MS ?? 30 * 60_000),
+
+  /**
+   * Скан дольше этого порога означает, что диску плохо: в норме обход
+   * укладывается в 1–3 с, а когда внешний USB-диск спотыкается или Dropbox
+   * переиндексирует папку, тот же обход растягивается до десятков минут.
+   * Гонять его в такой момент каждые полчаса — значит добивать диск.
+   */
+  slowScanMs: Number(process.env.VIARDE_SLOW_SCAN_MS ?? 30_000),
+
+  /**
+   * Интервал до следующего скана после медленного или упавшего:
+   * даём диску и Dropbox час тишины, чтобы они успели прийти в себя.
+   */
+  boardRefreshSlowMs: Number(process.env.VIARDE_BOARD_REFRESH_SLOW_MS ?? 60 * 60_000),
+
+  /**
+   * Скан, который начался раньше этого срока и не закончился, считаем
+   * мёртвым: процесс убили или сервер перезапустили. Иначе одна такая запись
+   * заблокировала бы все последующие сканы навсегда. Самый долгий живой
+   * скан, который мы видели, — 38 минут; два часа — с запасом.
+   */
+  scanRunTimeoutMs: Number(process.env.VIARDE_SCAN_RUN_TIMEOUT_MS ?? 2 * 60 * 60_000),
+
+  /**
+   * Единственное исключение из правила «приложение только читает»: чеклист
+   * правок дублируется в _Revisions.txt в папке сцены, чтобы его можно было
+   * открыть без приложения. Выключается через VIARDE_WRITE_REVISIONS=off —
+   * тогда чеклист живёт только в базе, и Dropbox не трогается вообще.
+   */
+  writeRevisionsFile: process.env.VIARDE_WRITE_REVISIONS !== 'off',
 
   /**
    * Дебаунс: если внутри проекта что-то менялось меньше N минут назад,
@@ -75,9 +105,6 @@ export const CONFIG = {
   /** Порог «застоя» для подсветки карточки, дней */
   staleWarnDays: 5,
   staleAlertDays: 14,
-
-  /** Подпапки проекта, которые нужны для доски (быстрый скан ~1 с) */
-  boardFolders: ['04_JPG', '05_Outbox', '01_Clients'],
 
   /** Полный стандартный набор папок проекта */
   standardFolders: [
@@ -99,9 +126,17 @@ export type Column = (typeof COLUMNS)[number];
 
 
 /** Кто держит мяч. Вторая ось модели — см. разбор PROJECT.md §3 */
-export type Ball = 'US' | 'CLIENT';
+export const BALLS = ['US', 'CLIENT'] as const;
+export type Ball = (typeof BALLS)[number];
 
 /** Вид отгрузки в 05_Outbox */
 export const DELIVERY_KINDS = ['FAST_PREVIEW', 'PREVIEW', 'PREFINAL', 'FINAL'] as const;
 export type DeliveryKind = (typeof DELIVERY_KINDS)[number];
+
+/**
+ * Этап конкретной сцены. Проект бывает одновременно и в рендере, и в посте —
+ * одной колонкой это не выразить, поэтому этап живёт на уровне сцены.
+ */
+export const SCENE_PHASES = ['EMPTY', 'RENDERING', 'CONVERTED', 'POST'] as const;
+export type ScenePhase = (typeof SCENE_PHASES)[number];
 

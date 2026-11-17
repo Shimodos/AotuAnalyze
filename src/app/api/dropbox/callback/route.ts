@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
+import { fetchAndSaveAccount } from '@/dropbox/account';
 import { DROPBOX, isConfigured } from '@/dropbox/config';
-import { dropboxCall } from '@/dropbox/client';
-import { saveAccount, saveTokens } from '@/dropbox/tokens';
+import { saveTokens } from '@/dropbox/tokens';
+import { errorMessage } from '@/server/http';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,17 +56,10 @@ export async function GET(request: Request) {
     saveTokens(JSON.parse(text));
 
     // Сразу выясняем командное пространство — без него пути проектов не резолвятся
-    const account = await dropboxCall<any>('users/get_current_account', null);
-    const root = account?.root_info?.root_namespace_id ?? null;
-    const home = account?.root_info?.home_namespace_id ?? null;
-    saveAccount({
-      name: account?.name?.display_name ?? null,
-      email: account?.email ?? null,
-      rootNamespaceId: root && root !== home ? root : null,
-    });
+    await fetchAndSaveAccount();
 
     return back({ dropbox: 'connected' });
   } catch (e) {
-    return back({ dropbox: 'error', reason: (e as Error).message.slice(0, 120) });
+    return back({ dropbox: 'error', reason: errorMessage(e).slice(0, 120) });
   }
 }

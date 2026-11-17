@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { COLUMNS, type Column } from '@/config';
 import { getDb, schema } from '@/db';
+import { jsonError, readJson, requireSameOrigin } from '@/server/http';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,24 +11,29 @@ export const dynamic = 'force-dynamic';
  * пин лишь переопределяет показ и пишется в аудит переходов.
  */
 export async function POST(request: Request) {
-  const body = (await request.json()) as { key?: string; column?: string | null };
-  if (!body.key) return NextResponse.json({ error: 'key обязателен' }, { status: 400 });
+  const denied = requireSameOrigin(request);
+  if (denied) return denied;
+
+  const body = await readJson<{ key?: string; column?: string | null }>(request);
+  if (!body) return jsonError('некорректный запрос', 400);
+  if (!body.key) return jsonError('key обязателен', 400);
 
   const db = getDb();
   const project = db.select().from(schema.projects).where(eq(schema.projects.key, body.key)).get();
-  if (!project) return NextResponse.json({ error: 'проект не найден' }, { status: 404 });
+  if (!project) return jsonError('проект не найден', 404);
 
   const target = body.column ?? null;
   if (target !== null && !(COLUMNS as readonly string[]).includes(target)) {
-    return NextResponse.json({ error: 'неизвестная колонка' }, { status: 400 });
+    return jsonError('неизвестная колонка', 400);
   }
+  const column = target as Column | null;
 
   const now = new Date();
   db.update(schema.projects)
     .set({
-      isPinned: target !== null,
-      pinnedColumn: target,
-      pinnedAt: target !== null ? now : null,
+      isPinned: column !== null,
+      pinnedColumn: column,
+      pinnedAt: column !== null ? now : null,
       stageSince: now,
       updatedAt: now,
     })
@@ -38,9 +44,10 @@ export async function POST(request: Request) {
     .values({
       projectKey: body.key,
       fromColumn: project.isPinned && project.pinnedColumn ? project.pinnedColumn : project.column,
-      toColumn: (target ?? project.column) as Column,
-      reason: target !== null ? 'pin' : 'unpin',
-      evidence: 'ручная фиксация в UI',
+      toColumn: column ?? project.column,
+      reason: column !== null ? 'pin' : 'unpin',
+      // код перевода, как и у автоматических переходов, а не готовая фраза
+      evidence: 'evidence.manual',
       createdAt: now,
     })
     .run();

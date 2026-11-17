@@ -1,28 +1,96 @@
-import * as nodePath from 'node:path';
-import { folderWebUrl } from '@/dropbox/webUrl';
 import { NextResponse } from 'next/server';
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
+import { currentRound } from '@/checklist/round';
+import type { Column, DeliveryKind, ScenePhase } from '@/config';
 import { getDb, schema } from '@/db';
+import { folderWebUrl } from '@/dropbox/webUrl';
+import type { Localized } from '@/i18n/types';
+import { errorMessage, jsonError } from '@/server/http';
+import { deliveryPath, scenePath } from '@/server/paths';
 
 export const dynamic = 'force-dynamic';
 
-/** Разворот карточки: сцены, отгрузки, история переходов, аномалии */
+/** Разворот карточки. Тип экспортируется — клиент импортирует его, а не переписывает руками. */
+export interface ProjectDetail {
+  project: {
+    key: string;
+    title: string;
+    folderName: string;
+    path: string;
+    webUrl: string | null;
+    evidence: Localized;
+    anomalies: Localized[];
+    lastDeliveryAt: number | null;
+    lastRenderAt: number | null;
+    sizeBytes: number | null;
+    /** круг правок, на котором проект сейчас */
+    round: number;
+  };
+  scenes: Array<{
+    path: string;
+    webUrl: string | null;
+    name: string;
+    sceneNumber: string | null;
+    isService: boolean;
+    imageCount: number;
+    exrCount: number;
+    psdCount: number;
+    psdFolder: string | null;
+    psdStages: Array<{ name: string; imageCount: number }>;
+    phase: ScenePhase;
+    plannedTotal: number;
+    plannedMissing: string[];
+    plannedGroups: string[];
+    versions: Array<{ name: string; imageCount: number }>;
+    hasUnrecognizedFiles: boolean;
+    /** сколько кадров отмечено «правки внесены» в текущем круге */
+    checkDone: number;
+  }>;
+  deliveries: Array<{
+    path: string;
+    webUrl: string | null;
+    folderName: string;
+    kind: DeliveryKind | null;
+    round: number | null;
+    isJunk: boolean;
+    fileCount: number;
+    sentAt: number | null;
+  }>;
+  changes: Array<{
+    id: number;
+    target: string;
+    kind: string;
+    params?: Record<string, string | number>;
+    times: number;
+    fileAt: number | null;
+    detectedAt: number;
+    isSeen: boolean;
+  }>;
+  events: Array<{
+    id: number;
+    from: Column | null;
+    to: Column;
+    reason: string;
+    at: number;
+  }>;
+}
+
 export async function GET(request: Request) {
   const key = new URL(request.url).searchParams.get('key');
-  if (!key) return NextResponse.json({ error: 'key обязателен' }, { status: 400 });
+  if (!key) return jsonError('key обязателен', 400);
 
   try {
-    return buildDetail(key);
+    const detail = buildDetail(key);
+    return detail ? NextResponse.json(detail) : jsonError('проект не найден', 404);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return jsonError(errorMessage(error), 500);
   }
 }
 
-function buildDetail(key: string) {
+function buildDetail(key: string): ProjectDetail | null {
   const db = getDb();
   const project = db.select().from(schema.projects).where(eq(schema.projects.key, key)).get();
-  if (!project) return NextResponse.json({ error: 'проект не найден' }, { status: 404 });
+  if (!project) return null;
 
   const scenes = db.select().from(schema.scenes).where(eq(schema.scenes.projectKey, key)).all();
   const deliveries = db
@@ -46,6 +114,16 @@ function buildDetail(key: string) {
     .limit(20)
     .all();
 
+  const round = currentRound(project.round, project.maxRound);
+  const doneByScene = new Map<string, number>();
+  for (const row of db
+    .select()
+    .from(schema.sceneChecks)
+    .where(and(eq(schema.sceneChecks.projectKey, key), eq(schema.sceneChecks.round, round)))
+    .all()) {
+    if (row.isDone) doneByScene.set(row.sceneName, (doneByScene.get(row.sceneName) ?? 0) + 1);
+  }
+
   scenes.sort((a, b) => {
     const an = a.sceneNumber ? parseInt(a.sceneNumber, 10) : 999;
     const bn = b.sceneNumber ? parseInt(b.sceneNumber, 10) : 999;
@@ -53,7 +131,7 @@ function buildDetail(key: string) {
   });
   deliveries.sort((a, b) => (b.sentAt?.getTime() ?? 0) - (a.sentAt?.getTime() ?? 0));
 
-  return NextResponse.json({
+  return {
     project: {
       key: project.key,
       title: project.title,
@@ -62,47 +140,50 @@ function buildDetail(key: string) {
       webUrl: folderWebUrl(project.path),
       evidence: { code: project.evidence, params: project.evidenceParams ?? undefined },
       anomalies: project.anomalies ?? [],
-      missingFolders: project.missingFolders ?? [],
       lastDeliveryAt: project.lastDeliveryAt?.getTime() ?? null,
       lastRenderAt: project.lastRenderAt?.getTime() ?? null,
       sizeBytes: project.sizeBytes,
+      round,
     },
     // Пути папок выводим из пути проекта — в БД их держать незачем,
     // а интерфейсу они нужны, чтобы открыть папку в проводнике.
-    scenes: scenes.map((s) => ({
-      path: nodePath.win32.join(project.path, '04_JPG', s.name),
-      webUrl: folderWebUrl(nodePath.win32.join(project.path, '04_JPG', s.name)),
-      name: s.name,
-      sceneNumber: s.sceneNumber,
-      skus: s.skus ?? [],
-      isService: s.isService,
-      imageCount: s.imageCount,
-      exrCount: s.exrCount,
-      psdCount: s.psdCount,
-      psdFolder: s.psdFolder,
-      psdStages: s.psdStages ?? [],
-      phase: s.phase,
-      plannedTotal: s.plannedTotal,
-      plannedMatched: s.plannedMatched,
-      plannedMissing: s.plannedMissing ?? [],
-      plannedGroups: s.plannedGroups ?? [],
-      lastExrAt: s.lastExrAt?.getTime() ?? null,
-      versions: s.versions ?? [],
-      lastImageAt: s.lastImageAt?.getTime() ?? null,
-      hasUnrecognizedFiles: s.hasUnrecognizedFiles,
-    })),
-    deliveries: deliveries.map((d) => ({
-      path: nodePath.win32.join(project.path, '05_Outbox', d.folderName),
-      webUrl: folderWebUrl(nodePath.win32.join(project.path, '05_Outbox', d.folderName)),
-      folderName: d.folderName,
-      kind: d.kind,
-      round: d.round,
-      isJunk: d.isJunk,
-      fileCount: d.fileCount,
-      sentAt: d.sentAt?.getTime() ?? null,
-    })),
+    scenes: scenes.map((s) => {
+      const p = scenePath(project.path, s.name);
+      return {
+        path: p,
+        webUrl: folderWebUrl(p),
+        name: s.name,
+        sceneNumber: s.sceneNumber,
+        isService: s.isService,
+        imageCount: s.imageCount,
+        exrCount: s.exrCount,
+        psdCount: s.psdCount,
+        psdFolder: s.psdFolder,
+        psdStages: s.psdStages ?? [],
+        phase: s.phase,
+        plannedTotal: s.plannedTotal,
+        plannedMissing: s.plannedMissing ?? [],
+        plannedGroups: s.plannedGroups ?? [],
+        versions: s.versions ?? [],
+        hasUnrecognizedFiles: s.hasUnrecognizedFiles,
+        checkDone: doneByScene.get(s.name) ?? 0,
+      };
+    }),
+    deliveries: deliveries.map((d) => {
+      const p = deliveryPath(project.path, d.folderName);
+      return {
+        path: p,
+        webUrl: folderWebUrl(p),
+        folderName: d.folderName,
+        kind: d.kind,
+        round: d.round,
+        isJunk: d.isJunk,
+        fileCount: d.fileCount,
+        sentAt: d.sentAt?.getTime() ?? null,
+      };
+    }),
     changes: changes.map((c) => ({
-      area: c.area,
+      id: c.id,
       target: c.target,
       kind: c.kind,
       params: c.params ?? undefined,
@@ -112,11 +193,11 @@ function buildDetail(key: string) {
       isSeen: c.isSeen,
     })),
     events: events.map((e) => ({
+      id: e.id,
       from: e.fromColumn,
       to: e.toColumn,
       reason: e.reason,
-      evidence: e.evidence ? { code: e.evidence, params: e.evidenceParams ?? undefined } : null,
       at: e.createdAt.getTime(),
     })),
-  });
+  };
 }

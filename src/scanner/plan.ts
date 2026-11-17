@@ -14,6 +14,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as XLSX from 'xlsx';
+import { NO_CACHE, type ScanCache } from './cache';
 
 export interface PlanGroup {
   /** имя листа: Interior, Studio, Render Tasks */
@@ -45,13 +46,17 @@ function isFileRow(value: string): boolean {
 /**
  * Ищет таблицу плана. Конфликтные копии Dropbox и временные файлы Excel
  * отсеиваем: «Спірна копія», «копія», префикс ~$.
+ *
+ * Содержимое каталога можно передать снаружи — сканер читает 01_Clients
+ * и для других целей, второй раз ходить на диск незачем.
  */
-export function findPlanFile(clientsDir: string): string | null {
-  let entries: fs.Dirent[];
-  try {
-    entries = fs.readdirSync(clientsDir, { withFileTypes: true });
-  } catch {
-    return null;
+export function findPlanFile(clientsDir: string, entries?: fs.Dirent[]): string | null {
+  if (!entries) {
+    try {
+      entries = fs.readdirSync(clientsDir, { withFileTypes: true });
+    } catch {
+      return null;
+    }
   }
 
   const candidates = entries
@@ -62,33 +67,40 @@ export function findPlanFile(clientsDir: string): string | null {
     .filter((name) => !/(спірна|спорная|конфликт|conflicted|копія|копия|copy)/i.test(name));
 
   if (candidates.length === 0) return null;
-  // При нескольких берём самый свежий — таблицу обновляют, а старую иногда оставляют
-  candidates.sort((a, b) => {
-    const at = (n: string) => {
-      try {
-        return fs.statSync(path.join(clientsDir, n)).mtimeMs;
-      } catch {
-        return 0;
-      }
-    };
-    return at(b) - at(a);
-  });
-  return path.join(clientsDir, candidates[0]);
+  if (candidates.length === 1) return path.join(clientsDir, candidates[0]);
+
+  // При нескольких берём самый свежий — таблицу обновляют, а старую иногда
+  // оставляют. mtime считаем один раз на кандидата, а не внутри компаратора.
+  const mtimeOf = (name: string) => {
+    try {
+      return fs.statSync(path.join(clientsDir, name)).mtimeMs;
+    } catch {
+      return 0;
+    }
+  };
+  const newest = candidates
+    .map((name) => ({ name, at: mtimeOf(name) }))
+    .sort((a, b) => b.at - a.at)[0];
+  return path.join(clientsDir, newest.name);
 }
 
-/** Кеш по пути и времени изменения: таблицу незачем перечитывать на каждом скане */
-const cache = new Map<string, { mtimeMs: number; groups: PlanGroup[] }>();
-
-export function parsePlan(filePath: string): PlanGroup[] {
-  let mtimeMs = 0;
+/**
+ * Таблицу незачем перечитывать на каждом скане: разобранные группы кешируются
+ * по отпечатку «mtime + размер». Кеш передаёт вызывающий (в сервере — SQLite,
+ * потому что скан идёт отдельным процессом и память между сканами не живёт).
+ */
+export function parsePlan(filePath: string, cache: ScanCache = NO_CACHE): PlanGroup[] {
+  let stamp: string;
   try {
-    mtimeMs = fs.statSync(filePath).mtimeMs;
+    const st = fs.statSync(filePath);
+    stamp = `${st.mtimeMs}:${st.size}`;
   } catch {
     return [];
   }
 
-  const hit = cache.get(filePath);
-  if (hit && hit.mtimeMs === mtimeMs) return hit.groups;
+  const key = 'plan:' + filePath;
+  const hit = cache.get<PlanGroup[]>(key, stamp);
+  if (hit) return hit;
 
   let workbook: XLSX.WorkBook;
   try {
@@ -135,7 +147,7 @@ export function parsePlan(filePath: string): PlanGroup[] {
   }
 
   const filled = groups.filter((g) => g.files.length > 0);
-  cache.set(filePath, { mtimeMs, groups: filled });
+  cache.set(key, stamp, filled);
   return filled;
 }
 

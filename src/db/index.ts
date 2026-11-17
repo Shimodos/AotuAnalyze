@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS projects (
   pinned_column TEXT,
   pinned_at INTEGER,
   cover_path TEXT,
+  cover_at INTEGER,
   missing_folders TEXT,
   anomalies TEXT,
   size_bytes INTEGER,
@@ -77,7 +78,6 @@ CREATE TABLE IF NOT EXISTS scenes (
   planned_missing TEXT,
   planned_groups TEXT,
   versions TEXT,
-  max_version TEXT,
   last_image_at INTEGER,
   cover_path TEXT,
   has_unrecognized_files INTEGER NOT NULL DEFAULT 0
@@ -138,6 +138,37 @@ CREATE TABLE IF NOT EXISTS scan_runs (
   with_sizes INTEGER NOT NULL DEFAULT 0,
   error TEXT
 );
+
+-- Отметки «правки по кадру внесены».
+-- ОТДЕЛЬНАЯ таблица, а не колонка в scenes: sync.ts при каждом скане делает
+-- delete(scenes) и вставляет заново, отметки исчезали бы каждые 15 минут.
+-- Список кадров здесь не хранится — он читается с диска в момент открытия,
+-- поэтому всегда актуален. Здесь только то, что проставил человек.
+CREATE TABLE IF NOT EXISTS scene_checks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_key TEXT NOT NULL,
+  scene_name TEXT NOT NULL,
+  file_name TEXT NOT NULL,
+  round INTEGER NOT NULL DEFAULT 1,
+  is_done INTEGER NOT NULL DEFAULT 0,
+  note TEXT,
+  updated_at INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS scene_checks_uniq
+  ON scene_checks(project_key, scene_name, file_name, round);
+CREATE INDEX IF NOT EXISTS scene_checks_scene_idx
+  ON scene_checks(project_key, scene_name);
+
+-- Кеш дорогих результатов обхода диска между сканами: разобранные xlsx-планы
+-- и сводки папок отгрузок. Скан идёт отдельным процессом, поэтому кеш в
+-- памяти не переживает его, а на USB-диске повторный разбор стоит секунды.
+-- stamp — отпечаток источника (mtime/размер); не совпал — запись протухла.
+CREATE TABLE IF NOT EXISTS file_cache (
+  key TEXT PRIMARY KEY,
+  stamp TEXT NOT NULL,
+  value TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
 `;
 
 function addColumnIfMissing(
@@ -190,10 +221,10 @@ export function getDb() {
   addColumnIfMissing(sqlite, 'projects', 'planned_total', 'INTEGER NOT NULL DEFAULT 0');
   addColumnIfMissing(sqlite, 'projects', 'planned_done', 'INTEGER NOT NULL DEFAULT 0');
   addColumnIfMissing(sqlite, 'scenes', 'planned_total', 'INTEGER NOT NULL DEFAULT 0');
-  addColumnIfMissing(sqlite, 'scenes', 'planned_done', 'INTEGER NOT NULL DEFAULT 0');
   addColumnIfMissing(sqlite, 'scenes', 'planned_matched', 'INTEGER NOT NULL DEFAULT 0');
   addColumnIfMissing(sqlite, 'scenes', 'planned_missing', 'TEXT');
   addColumnIfMissing(sqlite, 'scenes', 'planned_groups', 'TEXT');
+  addColumnIfMissing(sqlite, 'projects', 'cover_at', 'INTEGER');
 
   _db = drizzle(sqlite, { schema });
   return _db;

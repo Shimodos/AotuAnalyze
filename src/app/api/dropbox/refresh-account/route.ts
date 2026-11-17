@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { dropboxCall } from '@/dropbox/client';
-import { saveAccount } from '@/dropbox/tokens';
+import { fetchAndSaveAccount } from '@/dropbox/account';
+import { errorMessage, jsonError, requireSameOrigin } from '@/server/http';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,29 +8,14 @@ export const dynamic = 'force-dynamic';
  * Перечитать данные аккаунта и командное пространство без повторной авторизации.
  * Нужен, если при первом подключении запрос не прошёл — токены при этом уже сохранены.
  */
-export async function POST() {
+export async function POST(request: Request) {
+  const denied = requireSameOrigin(request);
+  if (denied) return denied;
+
   try {
-    const account = await dropboxCall<any>('users/get_current_account', null);
-    const root = account?.root_info?.root_namespace_id ?? null;
-    const home = account?.root_info?.home_namespace_id ?? null;
-
-    saveAccount({
-      name: account?.name?.display_name ?? null,
-      email: account?.email ?? null,
-      rootNamespaceId: root && root !== home ? root : null,
-    });
-
-    return NextResponse.json({
-      ok: true,
-      name: account?.name?.display_name ?? null,
-      email: account?.email ?? null,
-      rootType: account?.root_info?.['.tag'] ?? null,
-      rootNamespaceId: root,
-      homeNamespaceId: home,
-      teamSpace: Boolean(root && root !== home),
-    });
+    const account = await fetchAndSaveAccount();
+    return NextResponse.json({ ok: true, ...account });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return jsonError(errorMessage(error), 500);
   }
 }

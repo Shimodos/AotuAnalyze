@@ -34,37 +34,5 @@ export async function dropboxCall<T = unknown>(route: string, body: unknown): Pr
   return (text ? JSON.parse(text) : null) as T;
 }
 
-/**
- * Комментарии к файлу. Эндпоинт недокументированный — им пользуется веб-интерфейс
- * Dropbox. Публичного API для комментариев у Dropbox нет, это единственный способ
- * получить их напрямую. Может измениться без предупреждения, поэтому все вызовы
- * обёрнуты и падение здесь не должно ронять скан.
- */
-export interface CommentThread {
-  isResolved: boolean;
-  comments: Array<{ author: string; content: string; createdAt: string | null }>;
-}
-
-export async function listFileComments(fileRef: string): Promise<CommentThread[]> {
-  const data = await dropboxCall<any>('comments2/list_comments', {
-    stream: {
-      type: { '.tag': 'file' },
-      identifier: { '.tag': 'file_path_or_id', file_path_or_id: fileRef },
-    },
-    include_permissions: true,
-  });
-
-  const users: any[] = data?.users ?? [];
-  const nameOf = (id: string) => users.find((u) => u.id === id)?.public_name ?? 'невідомо';
-
-  return (data?.threads ?? []).map((thread: any) => ({
-    isResolved: Boolean(thread.is_resolved),
-    comments: (thread.comments ?? [])
-      .filter((c: any) => c.content)
-      .map((c: any) => ({
-        author: nameOf(c.author_id),
-        content: String(c.content),
-        createdAt: c.created_ts ?? null,
-      })),
-  }));
-}
+// Комментарии к файлам: исследование закрыто (COMMENTS_RESEARCH.md), рабочий
+// probe живёт в scripts/probe-file-comments.ts. В приложении вызовов нет.

@@ -651,3 +651,47 @@
 .planFillOver {
   background: var(--warn) !important;
 }
+
+// ── Кнопка чеклиста правок в строке сцены
+.checks,
+.checksSome,
+.checksDone {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+
+  svg {
+    flex: none;
+    opacity: 0.8;
+  }
+}
+
+.checks {
+  background: var(--chip-muted-bg);
+  color: var(--chip-muted-text);
+
+  &:hover {
+    color: var(--text);
+  }
+}
+
+// Начали отмечать, но не закончили — это состояние важнее всего видеть
+.checksSome {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.checksDone {
+  background: var(--ok-soft);
+  color: var(--ok);
+}

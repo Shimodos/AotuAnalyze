@@ -2,7 +2,8 @@ import { spawn } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { NextResponse } from 'next/server';
-import { CONFIG } from '@/config';
+import { errorMessage, jsonError, readJson, requireSameOrigin } from '@/server/http';
+import { isInsideRoot } from '@/server/paths';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +14,12 @@ export const dynamic = 'force-dynamic';
  * с самой этой машины (localhost) — это ровно то, что нужно. Если зашли по
  * сети, окно вылезло бы у чужого человека, поэтому такой запрос отклоняем и
  * возвращаем путь: интерфейс предложит скопировать его.
+ *
+ * Проверка по заголовку Host отсекает браузер, зашедший по IP, но не
+ * консольный клиент из сети, который Host подделает. От CSRF защищает
+ * requireSameOrigin, от запуска файлов — проверка isDirectory ниже.
+ * Если доска должна быть доступна только с этой машины, надёжнее
+ * слушать 127.0.0.1: `next start -H 127.0.0.1`.
  */
 function isLocalRequest(request: Request): boolean {
   const host = (request.headers.get('host') ?? '').toLowerCase();
@@ -27,32 +34,31 @@ function opener(target: string): { cmd: string; args: string[] } {
 }
 
 export async function POST(request: Request) {
-  let body: { path?: string };
-  try {
-    body = (await request.json()) as { path?: string };
-  } catch {
-    return NextResponse.json({ error: 'некорректный запрос' }, { status: 400 });
-  }
+  const denied = requireSameOrigin(request);
+  if (denied) return denied;
 
-  if (!body.path) return NextResponse.json({ error: 'path обязателен' }, { status: 400 });
+  const body = await readJson<{ path?: string }>(request);
+  if (!body) return jsonError('некорректный запрос', 400);
+  if (!body.path) return jsonError('path обязателен', 400);
 
   // Мы запускаем процесс, поэтому путь проверяем строго: только внутри корня
   // Dropbox. Аргументы передаём массивом, без shell — подстановка команд невозможна.
   const target = path.resolve(body.path);
-  const root = path.resolve(CONFIG.root);
-  if (target !== root && !target.startsWith(root + path.sep)) {
-    return NextResponse.json({ error: 'путь вне корня Dropbox' }, { status: 403 });
-  }
+  if (!isInsideRoot(target)) return jsonError('путь вне корня Dropbox', 403);
 
-  if (!fs.existsSync(target)) {
-    return NextResponse.json({ error: 'папка не найдена на диске' }, { status: 404 });
+  // Только каталог. explorer.exe с путём к файлу ЗАПУСКАЕТ этот файл
+  // ассоциированной программой — а Dropbox общий, и положить туда .exe
+  // может любой участник.
+  let isDirectory = false;
+  try {
+    isDirectory = fs.statSync(target).isDirectory();
+  } catch {
+    return jsonError('папка не найдена на диске', 404);
   }
+  if (!isDirectory) return jsonError('это не папка', 400);
 
   if (!isLocalRequest(request)) {
-    return NextResponse.json(
-      { error: 'remote', path: target, message: 'Доска открыта по сети — путь можно скопировать' },
-      { status: 409 },
-    );
+    return jsonError('Доска открыта по сети — путь можно скопировать', 409, 'remote', { path: target });
   }
 
   try {
@@ -65,7 +71,6 @@ export async function POST(request: Request) {
     // explorer.exe отдаёт код 1 даже при успехе — на код возврата не смотрим
     return NextResponse.json({ ok: true, path: target });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return jsonError(errorMessage(error), 500);
   }
 }

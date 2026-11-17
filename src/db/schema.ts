@@ -1,6 +1,10 @@
 import { sql } from 'drizzle-orm';
 import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { BALLS, COLUMNS, DELIVERY_KINDS, SCENE_PHASES } from '@/config';
 import type { Localized } from '@/i18n/types';
+
+/** Где произошло изменение — в папке сцены или в папке отгрузки */
+export const CHANGE_AREAS = ['SCENE', 'DELIVERY'] as const;
 
 /**
  * Схема истории. Текущее состояние считается сканом за ~1 секунду,
@@ -21,9 +25,11 @@ export const projects = sqliteTable(
     jobNumber: integer('job_number'),
     title: text('title').notNull(),
 
-    column: text('column').notNull(),
-    ball: text('ball').notNull(),
-    deliveryKind: text('delivery_kind'),
+    // Перечисления типизируем прямо в схеме: иначе из $inferSelect выходит
+    // string и по всему коду расползаются касты `as Column`
+    column: text('column', { enum: COLUMNS }).notNull(),
+    ball: text('ball', { enum: BALLS }).notNull(),
+    deliveryKind: text('delivery_kind', { enum: DELIVERY_KINDS }),
     round: integer('round'),
     maxRound: integer('max_round'),
     /** код перевода основания стадии; подстановки — в evidence_params */
@@ -62,11 +68,13 @@ export const projects = sqliteTable(
 
     /** ручная фиксация: колонка задана человеком и скан её не двигает */
     isPinned: integer('is_pinned', { mode: 'boolean' }).notNull().default(false),
-    pinnedColumn: text('pinned_column'),
+    pinnedColumn: text('pinned_column', { enum: COLUMNS }),
     /** момент закрепления — от него считаются дни и по нему снимается пин */
     pinnedAt: integer('pinned_at', { mode: 'timestamp_ms' }),
 
     coverPath: text('cover_path'),
+    /** mtime обложки: превью строится по нему, не трогая диск, пока обложка та же */
+    coverAt: integer('cover_at', { mode: 'timestamp_ms' }),
     missingFolders: text('missing_folders', { mode: 'json' }).$type<string[]>(),
     anomalies: text('anomalies', { mode: 'json' }).$type<Localized[]>(),
     sizeBytes: integer('size_bytes'),
@@ -98,13 +106,12 @@ export const scenes = sqliteTable(
     lastPsdAt: integer('last_psd_at', { mode: 'timestamp_ms' }),
     psdFolder: text('psd_folder'),
     psdStages: text('psd_stages', { mode: 'json' }).$type<Array<{ name: string; imageCount: number }>>(),
-    phase: text('phase').notNull().default('EMPTY'),
+    phase: text('phase', { enum: SCENE_PHASES }).notNull().default('EMPTY'),
     plannedTotal: integer('planned_total').notNull().default(0),
     plannedMatched: integer('planned_matched').notNull().default(0),
     plannedMissing: text('planned_missing', { mode: 'json' }).$type<string[]>(),
     plannedGroups: text('planned_groups', { mode: 'json' }).$type<string[]>(),
     versions: text('versions', { mode: 'json' }).$type<Array<{ name: string; imageCount: number }>>(),
-    maxVersion: text('max_version'),
     lastImageAt: integer('last_image_at', { mode: 'timestamp_ms' }),
     coverPath: text('cover_path'),
     hasUnrecognizedFiles: integer('has_unrecognized_files', { mode: 'boolean' })
@@ -120,7 +127,7 @@ export const deliveries = sqliteTable(
     id: text('id').primaryKey(),
     projectKey: text('project_key').notNull(),
     folderName: text('folder_name').notNull(),
-    kind: text('kind'),
+    kind: text('kind', { enum: DELIVERY_KINDS }),
     round: integer('round'),
     isJunk: integer('is_junk', { mode: 'boolean' }).notNull().default(false),
     fileCount: integer('file_count').notNull().default(0),
@@ -135,8 +142,8 @@ export const stageEvents = sqliteTable(
   {
     id: integer('id').primaryKey({ autoIncrement: true }),
     projectKey: text('project_key').notNull(),
-    fromColumn: text('from_column'),
-    toColumn: text('to_column').notNull(),
+    fromColumn: text('from_column', { enum: COLUMNS }),
+    toColumn: text('to_column', { enum: COLUMNS }).notNull(),
     reason: text('reason').notNull(),
     evidence: text('evidence'),
     evidenceParams: text('evidence_params', { mode: 'json' }).$type<Record<string, string | number>>(),
@@ -156,10 +163,8 @@ export const scanRuns = sqliteTable('scan_runs', {
   error: text('error'),
 });
 
-export type ProjectRow = typeof projects.$inferSelect;
 export type SceneRow = typeof scenes.$inferSelect;
 export type DeliveryRow = typeof deliveries.$inferSelect;
-export type StageEventRow = typeof stageEvents.$inferSelect;
 
 /**
  * Журнал изменений внутри проекта: что появилось, выросло или переписано.
@@ -172,7 +177,7 @@ export const changes = sqliteTable(
     id: integer('id').primaryKey({ autoIncrement: true }),
     projectKey: text('project_key').notNull(),
     /** SCENE или DELIVERY — где произошло */
-    area: text('area').notNull(),
+    area: text('area', { enum: CHANGE_AREAS }).notNull(),
     /** имя папки */
     target: text('target').notNull(),
     /** код перевода: change.imagesAdded и т.п. */
@@ -194,3 +199,38 @@ export const settings = sqliteTable('settings', {
   value: text('value').notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
 });
+
+/**
+ * Кеш дорогих результатов обхода диска между сканами (см. scanner/cache.ts).
+ * stamp — отпечаток источника; не совпал — запись протухла.
+ */
+export const fileCache = sqliteTable('file_cache', {
+  key: text('key').primaryKey(),
+  stamp: text('stamp').notNull(),
+  value: text('value').notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
+/**
+ * Отметки «правки по кадру внесены».
+ *
+ * Живёт отдельно от scenes намеренно: скан пересоздаёт scenes целиком
+ * (sync.ts делает delete + insert), и всё, что проставил человек, там бы
+ * стиралось. Список кадров тоже не хранится — читается с диска при открытии,
+ * поэтому переименование или новый рендер видны сразу.
+ */
+export const sceneChecks = sqliteTable(
+  'scene_checks',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    projectKey: text('project_key').notNull(),
+    sceneName: text('scene_name').notNull(),
+    fileName: text('file_name').notNull(),
+    /** круг правок: у каждого своя таблица отметок, прошлые сохраняются */
+    round: integer('round').notNull().default(1),
+    isDone: integer('is_done', { mode: 'boolean' }).notNull().default(false),
+    note: text('note'),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [index('scene_checks_scene_idx').on(t.projectKey, t.sceneName)],
+);

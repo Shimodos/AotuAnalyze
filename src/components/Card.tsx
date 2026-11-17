@@ -1,8 +1,10 @@
 'use client';
 
+import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { BoardCard } from '@/app/api/board/route';
 import { useI18n } from '@/i18n';
+import { fetchJson } from './fetchJson';
 import { Activity, Clock, FolderOpen, ICON, ICON_SM, Link2, Pin, Send, TriangleAlert, Users } from './icons';
 import styles from './Card.module.scss';
 
@@ -26,18 +28,12 @@ export function Card({ card, thresholds, onOpen, onOpenFolder, onCopyLink }: Pro
   const { t } = useI18n();
 
   const pin = useMutation({
-    mutationFn: async () => {
-      const res = await fetch('/api/pin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          key: card.key,
-          column: card.isPinned ? null : card.column,
-        }),
-      });
-      if (!res.ok) throw new Error(t('error.pin'));
-      return res.json();
-    },
+    mutationFn: () =>
+      fetchJson<{ ok: true }>(
+        '/api/pin',
+        { json: { key: card.key, column: card.isPinned ? null : card.column } },
+        () => t('error.pin'),
+      ),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['board'] }),
   });
 
@@ -50,9 +46,14 @@ export function Card({ card, thresholds, onOpen, onOpenFolder, onCopyLink }: Pro
       ? Math.round((card.scenesRendered / card.scenesTotal) * 100)
       : null;
 
+  // Обложка может быть онлайн-заглушкой Dropbox, которую сейчас нечем докачать
+  // (клиент не запущен, сеть). Сломанная картинка с alt-текстом хуже, чем её
+  // отсутствие — прячем и пробуем снова при следующем обновлении доски.
+  const [coverFailed, setCoverFailed] = useState(false);
+
   return (
     <article className={styles.card} onClick={onOpen}>
-      {card.hasCover && (
+      {card.hasCover && !coverFailed && (
         // обычный img, а не next/image: файлы лежат вне public и отдаются роутом
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -60,6 +61,7 @@ export function Card({ card, thresholds, onOpen, onOpenFolder, onCopyLink }: Pro
           src={`/api/thumb?key=${encodeURIComponent(card.key)}`}
           alt={card.title}
           loading="lazy"
+          onError={() => setCoverFailed(true)}
         />
       )}
 
@@ -69,7 +71,7 @@ export function Card({ card, thresholds, onOpen, onOpenFolder, onCopyLink }: Pro
           <span className={styles.actions}>
             <button
               className={styles.iconButton}
-              title={`Открыть папку проекта\n${card.path}`}
+              title={`${t('card.openFolder')}\n${card.path}`}
               onClick={(e) => {
                 e.stopPropagation();
                 onOpenFolder(card.path);

@@ -1,54 +1,48 @@
 /**
- * Фоновый скан. Это и есть «карточки двигаются сами»:
- * никакой очереди и вебхуков не нужно — полный проход занимает около секунды.
+ * Фоновый скан по таймеру. Это и есть «карточки двигаются сами», когда на
+ * доску никто не смотрит: иначе переход, случившийся ночью, попал бы в
+ * историю только утром, с открытием доски.
  *
  * Модуль грузится только в Node-рантайме, см. instrumentation.ts.
  *
- * ВАЖНО про dev. Таймер создаётся один раз при старте сервера и держит ссылку
- * на модуль, каким тот был на момент запуска. Hot reload на него не действует —
- * пересобираются только роуты, которые вызываются по запросу. В итоге после
- * любой правки логики скана фоновый тик продолжает крутить старый код и
- * затирает базу, куда CLI уже записал правильные данные.
- *
- * Поэтому в разработке автоскан выключен: там есть кнопка «Сканировать»
- * (роут /api/scan пересобирается на каждый запрос, то есть всегда свежий)
- * и `npm run scan`. Включить принудительно: VIARDE_AUTOSCAN=on
+ * Сам таймер ничего не сканирует — он дёргает scanIfStale() из sync/launch.ts,
+ * тот же вход, что и у /api/board: скан идёт отдельным процессом со свежим
+ * кодом, с той же проверкой «уже идёт» и тем же отступом после медленного
+ * скана. Поэтому старая проблема dev-режима — таймер держит модуль с момента
+ * старта и крутит устаревшую логику — больше не существует, и в dev он тоже
+ * безвреден. Выключен там по-прежнему только чтобы не плодить процессов,
+ * пока правят код. Включить принудительно: VIARDE_AUTOSCAN=on
  */
 
-import { syncOnce } from '@/sync/sync';
+import { scanIfStale } from '@/sync/launch';
 
 const isProd = process.env.NODE_ENV === 'production';
 const flag = process.env.VIARDE_AUTOSCAN;
 const enabled = flag === 'on' || (isProd && flag !== 'off');
 
 if (enabled) {
-  const intervalMs = Number(process.env.VIARDE_SCAN_INTERVAL_MS ?? 15 * 60_000);
+  // Тик — только проверка свежести; интервал скана задаёт VIARDE_BOARD_REFRESH_MS
+  const tickMs = Number(process.env.VIARDE_SCAN_TICK_MS ?? 5 * 60_000);
 
   const tick = () => {
     try {
-      const result = syncOnce();
-      for (const t of result.transitions) {
-        console.log(`[tracker] ${t.title}: ${t.from ?? '—'} → ${t.to}`);
-      }
-      for (const r of result.released) {
-        console.log(`[tracker] ${r.title}: пин снят — пришла новая отгрузка, теперь ${r.to}`);
-      }
+      const result = scanIfStale();
+      if (result === 'started') console.log('[tracker] фоновый скан запущен');
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      // «Скан уже идёт» — нормальная ситуация, не ошибка
-      if (message !== 'Скан уже идёт') console.error('[tracker] скан не удался:', message);
+      console.error('[tracker] фоновый скан не запустился:', message);
     }
   };
 
   tick();
-  const timer = setInterval(tick, intervalMs);
+  const timer = setInterval(tick, tickMs);
   // не держим процесс живым только ради таймера
   timer.unref?.();
 
-  console.log(`[tracker] фоновый скан каждые ${Math.round(intervalMs / 1000)} с`);
+  console.log(`[tracker] фоновый скан: проверка каждые ${Math.round(tickMs / 1000)} с`);
 } else {
   console.log(
-    '[tracker] фоновый скан выключен (dev). Кнопка «Сканировать» в UI или `npm run scan`. ' +
-      'Включить: VIARDE_AUTOSCAN=on',
+    '[tracker] фоновый таймер выключен (dev): скан запускает сама доска, ' +
+      'кнопка «Сканувати» или `npm run scan`. Включить: VIARDE_AUTOSCAN=on',
   );
 }

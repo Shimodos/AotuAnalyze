@@ -3,58 +3,48 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { COLUMNS, type Column } from '@/config';
-import type { BoardCard } from '@/app/api/board/route';
+import type { BoardCard, BoardData } from '@/app/api/board/route';
 import { LANGUAGES, LANGUAGE_LABEL, useI18n } from '@/i18n';
 import { useTheme } from './ThemeProvider';
 import { Card } from './Card';
 import { DropboxStatus } from './DropboxStatus';
+import { ApiError, fetchJson } from './fetchJson';
 import { Archive, ChevronLeft, ChevronRight, ICON, ICON_SM, Moon, RefreshCw, Sun, X } from './icons';
 import { ProjectPanel } from './ProjectPanel';
 import { useEdgeScroll } from './useEdgeScroll';
 import { useOpenFolder } from './useOpenFolder';
 import styles from './Board.module.scss';
 
-interface BoardData {
-  columns: readonly Column[];
-  cards: BoardCard[];
-  thresholds: { warn: number; alert: number };
-  lastScan: { at: number | null; durationMs: number | null; projectCount: number | null } | null;
-}
-
 export function Board() {
   const queryClient = useQueryClient();
   const [showArchive, setShowArchive] = useState(false);
   const [openKey, setOpenKey] = useState<string | null>(null);
   const { openFolder, copyLink, notice, dismissNotice } = useOpenFolder();
-  const { t, lang, setLang } = useI18n();
+  const { t, lang, locale, setLang } = useI18n();
   const { theme, toggleTheme } = useTheme();
   const edge = useEdgeScroll<HTMLDivElement>();
-  const locale = lang === 'uk' ? 'uk-UA' : 'en-US';
 
   const { data, isLoading, error } = useQuery<BoardData>({
     queryKey: ['board'],
-    queryFn: async () => {
-      const res = await fetch('/api/board');
-      const payload = await res.json().catch(() => null);
-      if (!res.ok) {
-        throw new Error(payload?.error ?? t('error.board', { status: res.status }));
-      }
-      return payload;
-    },
+    queryFn: () => fetchJson<BoardData>('/api/board', undefined, (s) => t('error.board', { status: s })),
     // Скан диска запускает сам роут /api/board, когда данные старше
-    // CONFIG.boardRefreshMs. Опрос нужен, чтобы подхватить результат чужого
-    // ручного скана, поэтому минуты достаточно.
-    refetchInterval: 60_000,
+    // CONFIG.boardRefreshMs. Опрос нужен, чтобы подхватить результат скана;
+    // рендер идёт десятками минут, пяти минут хватает. Пока скан идёт —
+    // чаще, чтобы результат появился без лишнего ожидания.
+    refetchInterval: (query) => (query.state.data?.scanning ? 5_000 : 5 * 60_000),
   });
 
+  const scanning = data?.scanning ?? false;
+
   const scan = useMutation({
-    mutationFn: async () => {
-      const res = await fetch('/api/scan', { method: 'POST' });
-      if (!res.ok) throw new Error(t('error.scan'));
-      return res.json();
-    },
+    mutationFn: () => fetchJson<{ ok: true }>('/api/scan', { method: 'POST' }, () => t('error.scan')),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['board'] }),
   });
+  // «Скан уже идёт» — не сбой, а ответ; показываем его по-человечески
+  const scanError =
+    scan.error instanceof ApiError && scan.error.code === 'running'
+      ? t('board.scanRunning')
+      : scan.error?.message;
 
   const visible = useMemo(
     () => (data?.cards ?? []).filter((c) => showArchive || !c.isArchived),
@@ -126,15 +116,17 @@ export function Board() {
           <button
             className={styles.scanButton}
             onClick={() => scan.mutate()}
-            disabled={scan.isPending}
+            disabled={scan.isPending || scanning}
+            title={scanError}
           >
-            <RefreshCw {...ICON} className={scan.isPending ? styles.spin : undefined} />
-            {scan.isPending ? t('board.scanning') : t('board.scan')}
+            <RefreshCw {...ICON} className={scan.isPending || scanning ? styles.spin : undefined} />
+            {scan.isPending || scanning ? t('board.scanning') : t('board.scan')}
           </button>
         </div>
       </header>
 
-      {error && <div className={styles.error}>{(error as Error).message}</div>}
+      {error && <div className={styles.error}>{error.message}</div>}
+      {scanError && !scanning && <div className={styles.error}>{scanError}</div>}
       {isLoading && <div className={styles.empty}>{t('board.loading')}</div>}
 
       {notice && (
@@ -166,7 +158,7 @@ export function Board() {
                     <Card
                       key={card.key}
                       card={card}
-                      thresholds={data?.thresholds ?? { warn: 5, alert: 14 }}
+                      thresholds={data!.thresholds}
                       onOpen={() => setOpenKey(card.key)}
                       onOpenFolder={openFolder}
                       onCopyLink={copyLink}

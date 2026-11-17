@@ -9,12 +9,13 @@
  *     Так логика сразу совместима с переездом на API.
  */
 
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { CONFIG } from '@/config';
-import { assignPlans, findPlanFile, parsePlan, type ScenePlan } from './plan';
+import { CONFIG, type DeliveryKind, type ScenePhase } from '@/config';
 import type { Localized } from '@/i18n/types';
-import type { DeliveryKind } from '@/config';
+import { NO_CACHE, type ScanCache } from './cache';
+import { assignPlans, findPlanFile, parsePlan, type ScenePlan } from './plan';
 import {
   isImage,
   isNoiseFile,
@@ -27,11 +28,7 @@ import {
   sortVersions,
 } from './parse';
 
-/**
- * Этап конкретной сцены. Проект бывает одновременно и в рендере, и в посте —
- * одной колонкой это не выразить, поэтому этап живёт на уровне сцены.
- */
-export type ScenePhase = 'EMPTY' | 'RENDERING' | 'CONVERTED' | 'POST';
+export type { ScenePhase };
 
 export interface ScannedDelivery {
   folderName: string;
@@ -83,7 +80,6 @@ export interface ScannedScene {
   plannedGroups: string[];
   phase: ScenePhase;
   versions: SceneVersion[];
-  maxVersion: string | null;
   lastImageAt: Date | null;
   /** путь к самой свежей картинке — обложка карточки */
   coverPath: string | null;
@@ -106,15 +102,18 @@ export interface ScannedProject {
   sizeBytes: number | null;
 }
 
-function listDirs(dir: string): string[] {
+function listEntries(dir: string): fs.Dirent[] {
   try {
-    return fs
-      .readdirSync(dir, { withFileTypes: true })
-      .filter((d) => d.isDirectory())
-      .map((d) => d.name);
+    return fs.readdirSync(dir, { withFileTypes: true });
   } catch {
     return [];
   }
+}
+
+function listDirs(dir: string): string[] {
+  return listEntries(dir)
+    .filter((d) => d.isDirectory())
+    .map((d) => d.name);
 }
 
 function exists(p: string): boolean {
@@ -133,36 +132,81 @@ interface FolderSummary {
   coverAt: Date | null;
 }
 
-/** Считает файлы, самый свежий mtime и обложку внутри папки отгрузки. */
-function summarizeFolder(dir: string, depth = 0): FolderSummary {
-  const out: FolderSummary = { fileCount: 0, newest: null, coverPath: null, coverAt: null };
-  if (depth > CONFIG.outboxScanDepth) return out;
+/** Дерево папки отгрузки: каждый каталог прочитан один раз, stat — только у каталогов */
+interface DirTree {
+  dir: string;
+  mtimeMs: number;
+  files: string[];
+  subdirs: DirTree[];
+}
 
+function readTree(dir: string, depth = 0): DirTree | null {
+  if (depth > CONFIG.outboxScanDepth) return null;
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(dir, { withFileTypes: true });
   } catch {
-    return out;
+    return null;
+  }
+  let mtimeMs = 0;
+  try {
+    mtimeMs = fs.statSync(dir).mtimeMs;
+  } catch {
+    /* каталог исчез между readdir и stat — отпечаток просто не совпадёт в следующий раз */
   }
 
+  const tree: DirTree = { dir, mtimeMs, files: [], subdirs: [] };
   for (const e of entries) {
-    const full = path.join(dir, e.name);
     if (e.isDirectory()) {
-      const nested = summarizeFolder(full, depth + 1);
-      out.fileCount += nested.fileCount;
-      if (nested.newest && (!out.newest || nested.newest > out.newest)) out.newest = nested.newest;
-      if (nested.coverAt && (!out.coverAt || nested.coverAt > out.coverAt)) {
-        out.coverAt = nested.coverAt;
-        out.coverPath = nested.coverPath;
-      }
+      const nested = readTree(path.join(dir, e.name), depth + 1);
+      if (nested) tree.subdirs.push(nested);
       continue;
     }
     if (isNoiseFile(e.name)) continue;
+    tree.files.push(e.name);
+  }
+  return tree;
+}
+
+/**
+ * Отпечаток дерева: mtime каждого каталога и имена файлов. Любое появление,
+ * удаление или переименование файла меняет mtime его каталога — отпечаток
+ * ловит всё, кроме перезаписи файла на месте под тем же именем (NTFS mtime
+ * каталога при этом не трогает). Dropbox и Photoshop пишут через временный
+ * файл и переименование, так что на практике это редкость; цена — событие
+ * «отгрузку переписали» в таком случае появится только со следующим
+ * изменением в папке.
+ */
+function treeStamp(tree: DirTree): string {
+  const h = createHash('sha1');
+  const walk = (t: DirTree) => {
+    h.update(String(t.mtimeMs)).update('\0').update(t.files.join('\n')).update('\0');
+    for (const s of t.subdirs) walk(s);
+  };
+  walk(tree);
+  return h.digest('hex');
+}
+
+/** Считает файлы, самый свежий mtime и обложку — stat на каждый файл. */
+function summarizeTree(tree: DirTree): FolderSummary {
+  const out: FolderSummary = { fileCount: 0, newest: null, coverPath: null, coverAt: null };
+
+  for (const nested of tree.subdirs.map(summarizeTree)) {
+    out.fileCount += nested.fileCount;
+    if (nested.newest && (!out.newest || nested.newest > out.newest)) out.newest = nested.newest;
+    if (nested.coverAt && (!out.coverAt || nested.coverAt > out.coverAt)) {
+      out.coverAt = nested.coverAt;
+      out.coverPath = nested.coverPath;
+    }
+  }
+
+  for (const name of tree.files) {
+    const full = path.join(tree.dir, name);
     out.fileCount++;
     try {
       const stat = fs.statSync(full);
       if (!out.newest || stat.mtime > out.newest) out.newest = stat.mtime;
-      if (isImage(e.name) && stat.size >= CONFIG.minFileSize) {
+      if (isImage(name) && stat.size >= CONFIG.minFileSize) {
         if (!out.coverAt || stat.mtime > out.coverAt) {
           out.coverAt = stat.mtime;
           out.coverPath = full;
@@ -176,6 +220,46 @@ function summarizeFolder(dir: string, depth = 0): FolderSummary {
   return out;
 }
 
+/** Даты в кеше лежат числами */
+interface StoredSummary {
+  fileCount: number;
+  newest: number | null;
+  coverPath: string | null;
+  coverAt: number | null;
+}
+
+/**
+ * Сводка папки отгрузки. Это 70 % всех обращений к диску за скан: каждая
+ * отгрузка — сотни файлов, и все они статятся ради max(mtime). Поэтому
+ * результат кешируется по отпечатку дерева, а stat файлов идёт только
+ * когда в папке что-то изменилось.
+ */
+function summarizeDelivery(dir: string, cache: ScanCache): FolderSummary {
+  const tree = readTree(dir);
+  if (!tree) return { fileCount: 0, newest: null, coverPath: null, coverAt: null };
+
+  const key = 'outbox:' + dir;
+  const stamp = treeStamp(tree);
+  const hit = cache.get<StoredSummary>(key, stamp);
+  if (hit) {
+    return {
+      fileCount: hit.fileCount,
+      newest: hit.newest === null ? null : new Date(hit.newest),
+      coverPath: hit.coverPath,
+      coverAt: hit.coverAt === null ? null : new Date(hit.coverAt),
+    };
+  }
+
+  const out = summarizeTree(tree);
+  cache.set<StoredSummary>(key, stamp, {
+    fileCount: out.fileCount,
+    newest: out.newest?.getTime() ?? null,
+    coverPath: out.coverPath,
+    coverAt: out.coverAt?.getTime() ?? null,
+  });
+  return out;
+}
+
 interface ImageScan {
   count: number;
   /** имена засчитанных файлов — по ним сверяемся с планом из таблицы клиента */
@@ -184,6 +268,8 @@ interface ImageScan {
   coverPath: string | null;
   /** файлы с рендерным расширением, не прошедшие порог размера */
   rejected: number;
+  /** подпапки — этапы рендера; отдаём отсюда, чтобы не читать каталог второй раз */
+  dirs: string[];
 }
 
 /**
@@ -195,19 +281,15 @@ interface ImageScan {
  * сцена с восемью итерациями весит как восемь сцен.
  */
 function scanImages(dir: string): ImageScan {
-  const out: ImageScan = { count: 0, names: [], newest: null, coverPath: null, rejected: 0 };
+  const out: ImageScan = { count: 0, names: [], newest: null, coverPath: null, rejected: 0, dirs: [] };
 
-  let entries: fs.Dirent[];
-  try {
-    entries = fs.readdirSync(dir, { withFileTypes: true });
-  } catch {
-    return out;
-  }
-
-  for (const e of entries) {
+  for (const e of listEntries(dir)) {
     const full = path.join(dir, e.name);
 
-    if (e.isDirectory()) continue;
+    if (e.isDirectory()) {
+      out.dirs.push(e.name);
+      continue;
+    }
     if (isNoiseFile(e.name) || !isImage(e.name)) continue;
 
     let stat: fs.Stats;
@@ -276,13 +358,16 @@ function countPsd(dir: string): {
 
 /** Сколько psd лежит внутри подпапки-этапа — только для показа, не для прогресса */
 function countPsdFlat(dir: string): number {
-  try {
-    return fs
-      .readdirSync(dir, { withFileTypes: true })
-      .filter((e) => !e.isDirectory() && /.psd$/i.test(e.name)).length;
-  } catch {
-    return 0;
-  }
+  return listEntries(dir).filter((e) => !e.isDirectory() && /\.psd$/i.test(e.name)).length;
+}
+
+/**
+ * Сколько картинок в подпапке-этапе (001, 002…). Только для показа, поэтому
+ * без stat и порога размера: этапов на дереве больше тысячи файлов, и статить
+ * их ради числа в подсказке — 10 % всех обращений к диску за скан.
+ */
+function countImagesFlat(dir: string): number {
+  return listEntries(dir).filter((e) => !e.isDirectory() && !isNoiseFile(e.name) && isImage(e.name)).length;
 }
 
 /** Суммарный вес папки. Дорого (полный обход) — только для отчёта по месту. */
@@ -308,7 +393,12 @@ function folderSize(dir: string): number {
   return total;
 }
 
-export function scanProject(root: string, folderName: string, withSizes = false): ScannedProject {
+export function scanProject(
+  root: string,
+  folderName: string,
+  withSizes = false,
+  cache: ScanCache = NO_CACHE,
+): ScannedProject {
   const projectPath = path.join(root, folderName);
   const { jobNumber, title } = parseProjectName(folderName);
   const anomalies: Localized[] = [];
@@ -325,26 +415,24 @@ export function scanProject(root: string, folderName: string, withSizes = false)
   // ── 05_Outbox: отгрузки клиенту
   const deliveries: ScannedDelivery[] = [];
   const outboxPath = path.join(projectPath, '05_Outbox');
-  if (exists(outboxPath)) {
-    for (const name of listDirs(outboxPath)) {
-      const parsed = parseDelivery(name, folderName);
-      const { fileCount, newest, coverPath, coverAt } = summarizeFolder(path.join(outboxPath, name));
-      deliveries.push({
-        folderName: name,
-        kind: parsed.kind,
-        round: parsed.round,
-        isJunk: parsed.isJunk,
-        fileCount,
-        sentAt: fileCount > 0 ? newest : null,
-        coverPath,
-        coverAt,
-      });
-      if (!parsed.kind && !parsed.isJunk && fileCount > 0) {
-        anomalies.push({ code: 'anomaly.outboxUnknown', params: { name } });
-      }
-      if (parsed.kind && fileCount === 0) {
-        anomalies.push({ code: 'anomaly.outboxEmpty', params: { name } });
-      }
+  for (const name of listDirs(outboxPath)) {
+    const parsed = parseDelivery(name, folderName);
+    const { fileCount, newest, coverPath, coverAt } = summarizeDelivery(path.join(outboxPath, name), cache);
+    deliveries.push({
+      folderName: name,
+      kind: parsed.kind,
+      round: parsed.round,
+      isJunk: parsed.isJunk,
+      fileCount,
+      sentAt: fileCount > 0 ? newest : null,
+      coverPath,
+      coverAt,
+    });
+    if (!parsed.kind && !parsed.isJunk && fileCount > 0) {
+      anomalies.push({ code: 'anomaly.outboxUnknown', params: { name } });
+    }
+    if (parsed.kind && fileCount === 0) {
+      anomalies.push({ code: 'anomaly.outboxEmpty', params: { name } });
     }
   }
 
@@ -398,13 +486,12 @@ export function scanProject(root: string, folderName: string, withSizes = false)
         ? countPsd(path.join(psdPath, psdFolder))
         : { count: 0, newest: null, stages: [] as SceneVersion[] };
 
-      const subDirs = listDirs(scenePath);
-      const versionNames = sortVersions(subDirs.filter((v) => /^\d{1,3}$/.test(v)));
+      const versionNames = sortVersions(img.dirs.filter((v) => /^\d{1,3}$/.test(v)));
       const versions = versionNames.map((v) => ({
         name: v,
-        imageCount: scanImages(path.join(scenePath, v)).count,
+        imageCount: countImagesFlat(path.join(scenePath, v)),
       }));
-      const odd = subDirs.filter((v) => !/^\d{1,3}$/.test(v));
+      const odd = img.dirs.filter((v) => !/^\d{1,3}$/.test(v));
 
       const skuOptional = (CONFIG.sceneNamesWithoutSku as readonly string[]).includes(
         name.toLowerCase().trim(),
@@ -446,7 +533,6 @@ export function scanProject(root: string, folderName: string, withSizes = false)
                 ? 'RENDERING'
                 : 'EMPTY',
         versions,
-        maxVersion: versionNames.length ? versionNames[versionNames.length - 1] : null,
         lastImageAt: img.newest,
         coverPath: img.coverPath,
         hasUnrecognizedFiles: img.count === 0 && img.rejected > 0,
@@ -454,10 +540,13 @@ export function scanProject(root: string, folderName: string, withSizes = false)
     }
   }
 
-  // ── План рендеров из сводной таблицы клиента
-  const planFile = findPlanFile(path.join(projectPath, '01_Clients'));
+  // ── 01_Clients читаем один раз: и план рендеров, и сигналы правок от клиента
+  const clientsPath = path.join(projectPath, '01_Clients');
+  const clientEntries = listEntries(clientsPath);
+
+  const planFile = findPlanFile(clientsPath, clientEntries);
   const plans: Map<string, ScenePlan> = planFile
-    ? assignPlans(parsePlan(planFile), namesByScene)
+    ? assignPlans(parsePlan(planFile, cache), namesByScene)
     : new Map();
 
   for (const scene of scenes) {
@@ -469,14 +558,9 @@ export function scanProject(root: string, folderName: string, withSizes = false)
     scene.plannedGroups = plan.groups;
   }
 
-  // ── 01_Clients: сигналы правок от клиента
-  const clientFeedbackFolders: string[] = [];
-  const clientsPath = path.join(projectPath, '01_Clients');
-  if (exists(clientsPath)) {
-    for (const name of listDirs(clientsPath)) {
-      if (/comment|feedback|correction|post_ref/i.test(name)) clientFeedbackFolders.push(name);
-    }
-  }
+  const clientFeedbackFolders = clientEntries
+    .filter((e) => e.isDirectory() && /comment|feedback|correction|post_ref/i.test(e.name))
+    .map((e) => e.name);
 
   return {
     key: projectKey(folderName),
@@ -500,7 +584,11 @@ export function listProjectFolders(root: string): string[] {
     .filter((n) => !(CONFIG.notProjects as readonly string[]).includes(n));
 }
 
-export function scanAll(root: string = CONFIG.root, withSizes = false): ScannedProject[] {
+export function scanAll(
+  root: string = CONFIG.root,
+  withSizes = false,
+  cache: ScanCache = NO_CACHE,
+): ScannedProject[] {
   if (!exists(root)) throw new Error(`Корень Dropbox не найден: ${root}`);
-  return listProjectFolders(root).map((name) => scanProject(root, name, withSizes));
+  return listProjectFolders(root).map((name) => scanProject(root, name, withSizes, cache));
 }
