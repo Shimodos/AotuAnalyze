@@ -3,6 +3,8 @@ node_modules/
 data/*.db
 data/*.db-*
 .cache/
+# собранная программа (scripts/pack.mjs); внутри лежит ключ приложения Dropbox
+dist/
 next-env.d.ts
 *.tsbuildinfo
 

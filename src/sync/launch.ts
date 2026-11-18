@@ -23,9 +23,10 @@ import * as path from 'node:path';
 import { and, desc, eq, isNull } from 'drizzle-orm';
 import { CONFIG } from '@/config';
 import { getDb, schema } from '@/db';
+import { isConnected } from '@/dropbox/tokens';
 import { findRunningScan } from './sync';
 
-export type LaunchResult = 'started' | 'running' | 'fresh' | 'failed';
+export type LaunchResult = 'started' | 'running' | 'fresh' | 'failed' | 'not-connected';
 
 /**
  * Скан, если данные устарели. Возвращает, что произошло, — вызывающему
@@ -74,6 +75,12 @@ function closeRunIfOpen(runId: number, error: string) {
 export function startBackgroundScan(options: { withSizes?: boolean } = {}): LaunchResult {
   if (findRunningScan()) return 'running';
 
+  // Пока Dropbox не подключён, сканировать нечем: данные идут из API. Раньше
+  // скан в этом случае молча шёл по диску — ровно та нагрузка, от которой
+  // уходили, причём на свежей установке, где её никто не ждёт. Обход диска
+  // остался только явным: VIARDE_SOURCE=disk или подсчёт веса проектов.
+  if (CONFIG.source === 'api' && !options.withSizes && !isConnected()) return 'not-connected';
+
   const db = getDb();
   const [run] = db
     .insert(schema.scanRuns)
@@ -86,8 +93,14 @@ export function startBackgroundScan(options: { withSizes?: boolean } = {}): Laun
   // (detached) — и Windows выдаёт внуку новое консольное окно: на экране при
   // каждом скане всплывал терминал. С загрузчиком процесс один, окна нет.
   // «tsx» резолвится от cwd, то есть из node_modules проекта.
+  //
+  // В собранной программе (scripts/pack.mjs) исходников и tsx нет: скан собран
+  // в один файл, путь к нему передаёт запускающий скрипт в VIARDE_SCAN_SCRIPT.
   const cwd = process.cwd();
-  const args = ['--import', 'tsx', path.join('scripts', 'scan.ts'), '--quiet', `--run=${run.id}`];
+  const packed = process.env.VIARDE_SCAN_SCRIPT;
+  const args = packed
+    ? [packed, '--quiet', `--run=${run.id}`]
+    : ['--import', 'tsx', path.join('scripts', 'scan.ts'), '--quiet', `--run=${run.id}`];
   if (options.withSizes) args.push('--sizes');
 
   try {

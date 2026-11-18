@@ -21,5 +21,6 @@ export async function POST(request: Request) {
   const result = startBackgroundScan({ withSizes });
   if (result === 'running') return jsonError('Скан уже идёт', 409, 'running');
   if (result === 'failed') return jsonError('не удалось запустить скан', 500);
+  if (result === 'not-connected') return jsonError('Dropbox не подключён', 409, 'not-connected');
   return NextResponse.json({ ok: true, started: true });
 }
