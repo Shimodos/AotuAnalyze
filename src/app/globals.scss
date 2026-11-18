@@ -7,142 +7,89 @@
  * Скругления. Шкала, а не одно значение: вложенные элементы должны иметь
  * радиус меньше внешнего на величину отступа, иначе углы выглядят
  * «неконцентрично» — карточка внутри колонки кажется квадратнее, чем она есть.
- *   оболочка 26 − отступ 10 ≈ колонка 16 − отступ 10 ≈ карточка 13 − отступ 12 ≈ чип 7
+ *   колонка 14 − отступ 12 ≈ карточка 11 − отступ 12 ≈ чип 5
  */
 :root {
-  --radius-xl: 26px;
-  --radius: 16px;
-  --radius-md: 13px;
-  --radius-sm: 10px;
-  --radius-xs: 7px;
+  --radius: 14px;
+  --radius-md: 11px;
+  --radius-sm: 9px;
+  --radius-xs: 5px;
   --radius-pill: 999px;
 }
 
-/**
- * Светлая тема — основная. Чистый белый на большом фоне бликует и делает
- * карточки плоскими, поэтому слоёв три и каждый теплее предыдущего:
- * страница — тёплый серо-бежевый, корпус приложения — почти белый,
- * колонка — на тон темнее корпуса, карточка — самый светлый слой.
- * Границы между слоями держатся на разнице тона, а не на жёстких рамках.
- */
 :root,
-:root[data-theme='light'] {
-  --bg: #e4e2dd;
-  --shell: #fbfaf8;
-  --panel: #f1f0ec;
-  --panel-2: #ffffff;
-  --line: #e6e3dc;
-  --line-soft: #edeae4;
-  --text: #212220;
-  --muted: #6f6d66;
-  --faint: #a5a199;
+:root[data-theme='dark'] {
+  --bg: #0f1115;
+  --panel: #171a21;
+  --panel-2: #1d2129;
+  --line: #262b35;
+  --text: #e9ecf2;
+  --muted: #9aa3b4;
+  --faint: #545c6d;
 
-  // Тёмная заливка: активный чип, главная кнопка, плитка иконки в метрике
-  --ink: #22231f;
-  --ink-text: #fbfaf8;
-  --ink-muted: #a8a79f;
+  --accent: #5b93ff;
+  --accent-soft: rgba(91, 147, 255, 0.18);
+  --warn: #e0ac4b;
+  --warn-soft: rgba(224, 172, 75, 0.16);
+  --alert: #e86a6e;
+  --ok: #4fbc8a;
+  --ok-soft: rgba(79, 188, 138, 0.16);
 
-  // Зелёный — фирменный акцент: активный пункт меню и главные действия
-  --brand: #90e26c;
-  --brand-strong: #7bd455;
-  --brand-ink: #1e2c14;
+  --hover: #232936;
+  --sunken: #0b0d11;
+  --track: #2a3040;
 
-  // Акцентом красится текст и обводка, поэтому он темнее заливки —
-  // светло-зелёная надпись на белом нечитаема
-  --accent: #3f8f2a;
-  --accent-soft: #e6f6dc;
+  --chip-bg: #2a3242;
+  --chip-text: #b3c0d6;
+  --chip-muted-bg: #232833;
+  --chip-muted-text: #7b8496;
 
-  --warn: #8a6410;
-  --warn-soft: #fbf0d4;
-  --alert: #b13c33;
-  --alert-soft: #fae2df;
-  --ok: #35803f;
-  --ok-soft: #e2f4d9;
-
-  // Плашка-подсказка внутри карточки
-  --note-bg: #fdf5e2;
-  --note-text: #6d5c2e;
-
-  --hover: #f0eee9;
-  --sunken: #eceae5;
-  --track: #e4e1da;
-
-  --chip-bg: #eceae4;
-  --chip-text: #55534c;
-  --chip-muted-bg: #f2f0eb;
-  --chip-muted-text: #85817a;
-  // Счётчик внутри тёмного чипа: подложка поверх заливки, а не свой цвет
-  --chip-count-overlay: rgba(255, 255, 255, 0.18);
-
-  --code: #3f6f2f;
-  --overlay: rgba(48, 46, 40, 0.34);
-  --edge-fade: rgba(251, 250, 248, 0.92);
-  --scrollbar: #d5d1c8;
-  --scrollbar-hover: #b9b4a9;
-
-  --shadow-card: 0 1px 2px rgba(64, 60, 50, 0.06), 0 6px 18px rgba(64, 60, 50, 0.07);
-  --shadow-pop: 0 2px 6px rgba(64, 60, 50, 0.09), 0 18px 44px rgba(64, 60, 50, 0.14);
-  --shadow-shell: 0 1px 3px rgba(64, 60, 50, 0.07), 0 24px 70px rgba(64, 60, 50, 0.12);
-  --shadow: rgba(64, 60, 50, 0.16);
+  --code: #a8c9ff;
+  --overlay: rgba(0, 0, 0, 0.55);
+  --edge-fade: rgba(15, 17, 21, 0.85);
+  --scrollbar: #3a4252;
+  --scrollbar-hover: #4d5768;
+  --shadow: rgba(0, 0, 0, 0.6);
 }
 
 /**
- * Тёмная тема — та же система, перевёрнутая. Фон не чёрный, а тёплый
- * тёмно-серый: на чёрном белый текст даёт ореол, а слои перестают читаться.
- * --ink здесь светлый: тёмная плашка на тёмном фоне не работает как акцент.
+ * Светлая тема на молочных тонах. Чистый белый намеренно не используется:
+ * #ffffff на большом фоне бликует и делает карточки плоскими — граница между
+ * колонкой и карточкой пропадает. Здесь фон тёплый серо-бежевый, а карточка
+ * почти белая, но с тёплым подмесом, поэтому слои читаются без жёстких теней.
  */
-:root[data-theme='dark'] {
-  --bg: #131412;
-  --shell: #1b1c19;
-  --panel: #212320;
-  --panel-2: #292b27;
-  --line: #33352f;
-  --line-soft: #2b2d29;
-  --text: #ecebe6;
-  --muted: #9d9c94;
-  --faint: #6b6a63;
+:root[data-theme='light'] {
+  --bg: #eeebe5;
+  --panel: #f5f3ef;
+  --panel-2: #fbfaf7;
+  --line: #ddd8cf;
+  --text: #2c2a26;
+  --muted: #6d675d;
+  --faint: #a49d92;
 
-  --ink: #ecebe6;
-  --ink-text: #1b1c19;
-  --ink-muted: #6b6a63;
+  --accent: #3565cf;
+  --accent-soft: rgba(53, 101, 207, 0.12);
+  --warn: #9a6c12;
+  --warn-soft: rgba(154, 108, 18, 0.13);
+  --alert: #b3423d;
+  --ok: #2f7d59;
+  --ok-soft: rgba(47, 125, 89, 0.14);
 
-  --brand: #90e26c;
-  --brand-strong: #a2ea82;
-  --brand-ink: #16210f;
+  --hover: #ebe7e0;
+  --sunken: #e4e0d8;
+  --track: #ded9d0;
 
-  --accent: #93df72;
-  --accent-soft: rgba(144, 226, 108, 0.16);
+  --chip-bg: #e6e2d9;
+  --chip-text: #555047;
+  --chip-muted-bg: #eae6de;
+  --chip-muted-text: #837c71;
 
-  --warn: #e0b45f;
-  --warn-soft: rgba(224, 180, 95, 0.15);
-  --alert: #e8807a;
-  --alert-soft: rgba(232, 128, 122, 0.16);
-  --ok: #7fd08c;
-  --ok-soft: rgba(127, 208, 140, 0.16);
-
-  --note-bg: rgba(224, 180, 95, 0.12);
-  --note-text: #ddc48c;
-
-  --hover: #2f322d;
-  --sunken: #181916;
-  --track: #35382f;
-
-  --chip-bg: #32352f;
-  --chip-text: #c3c2ba;
-  --chip-muted-bg: #282a26;
-  --chip-muted-text: #8b8a82;
-  --chip-count-overlay: rgba(27, 28, 25, 0.14);
-
-  --code: #a9dd8e;
-  --overlay: rgba(0, 0, 0, 0.6);
-  --edge-fade: rgba(27, 28, 25, 0.92);
-  --scrollbar: #3d403a;
-  --scrollbar-hover: #55594f;
-
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-pop: 0 2px 8px rgba(0, 0, 0, 0.45), 0 18px 44px rgba(0, 0, 0, 0.5);
-  --shadow-shell: 0 24px 70px rgba(0, 0, 0, 0.55);
-  --shadow: rgba(0, 0, 0, 0.6);
+  --code: #2f5bb8;
+  --overlay: rgba(58, 54, 46, 0.32);
+  --edge-fade: rgba(238, 235, 229, 0.9);
+  --scrollbar: #cdc7bc;
+  --scrollbar-hover: #b5aea1;
+  --shadow: rgba(70, 64, 54, 0.18);
 }
 
 * {
@@ -166,7 +113,7 @@ body {
     sans-serif;
   font-size: 16px;
   line-height: 1.45;
-  letter-spacing: -0.011em;
+  letter-spacing: -0.005em;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;

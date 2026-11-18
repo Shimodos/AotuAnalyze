@@ -1,32 +1,20 @@
-// Карточка. Два состояния слоя: требующая внимания — белая с тенью,
-// спокойная — плоская, в тон колонки. Это единственный способ показать
-// приоритет, не добавляя ещё одну цветную метку в и без того плотную карточку.
-.card,
-.cardCalm {
+.card {
   // Карточка — flex-элемент колонки. Без этого она сжимается по высоте,
   // содержимое влезает в контейнер, и скролл в колонке никогда не появляется.
   flex: 0 0 auto;
-  border: 1px solid transparent;
+  border: 1px solid var(--line);
   border-radius: var(--radius-md);
   background: var(--panel-2);
-  box-shadow: var(--shadow-card);
   overflow: hidden;
   cursor: pointer;
   transition:
-    box-shadow 0.15s ease,
     border-color 0.15s ease,
     transform 0.15s ease;
 
   &:hover {
-    border-color: var(--line);
-    box-shadow: var(--shadow-pop);
+    border-color: var(--accent);
     transform: translateY(-1px);
   }
-}
-
-.cardCalm {
-  background: var(--chip-muted-bg);
-  box-shadow: none;
 }
 
 .cover {
@@ -38,72 +26,28 @@
 }
 
 .body {
-  padding: 12px;
+  padding: 12px 13px 11px;
 }
 
-.head {
+.topRow {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
-}
-
-// Номер джоба вместо аватарки: единственный короткий идентификатор,
-// по которому проект зовут в переписке
-.avatar {
-  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  flex: none;
-  border-radius: var(--radius-sm);
-  background: var(--chip-bg);
-  color: var(--chip-text);
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.job {
   font-size: 13px;
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
-}
-
-.avatarLive {
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-
-.headText {
-  flex: 1;
-  min-width: 0;
-}
-
-.title {
-  margin: 0;
-  font-size: 15px;
   font-weight: 600;
-  line-height: 1.25;
-  letter-spacing: -0.015em;
-}
-
-.sub {
-  display: block;
   color: var(--muted);
-  font-size: 12.5px;
   font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
 }
 
 .actions {
   display: flex;
   align-items: center;
-  gap: 1px;
-  flex: none;
-  // Кнопки проявляются на наведении, но остаются доступными с клавиатуры
-  opacity: 0.45;
-  transition: opacity 0.15s ease;
-}
-
-.card:hover .actions,
-.cardCalm:hover .actions,
-.actions:focus-within {
-  opacity: 1;
+  gap: 2px;
 }
 
 .iconButton,
@@ -111,18 +55,20 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 5px;
+  padding: 4px;
   border: 0;
   border-radius: var(--radius-xs);
   background: none;
+  font-size: 14px;
   line-height: 1;
   color: var(--muted);
+  opacity: 0.55;
   transition:
-    color 0.15s ease,
+    opacity 0.15s ease,
     background 0.15s ease;
 
   &:hover {
-    color: var(--text);
+    opacity: 1;
     background: var(--hover);
   }
 }
@@ -130,68 +76,54 @@
 // Закреплённая карточка должна читаться с одного взгляда
 .pinActive {
   color: var(--accent);
-  background: var(--accent-soft);
   opacity: 1;
+  background: var(--accent-soft);
+}
+
+.title {
+  margin: 5px 0 10px;
+  font-size: 16px;
+  font-weight: 550;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
 }
 
 .progressBlock {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-top: 11px;
+  margin-bottom: 10px;
 }
 
 .progressBar {
   flex: 1;
-  height: 6px;
-  border-radius: var(--radius-pill);
+  height: 5px;
+  border-radius: var(--radius-xs);
   background: var(--track);
   overflow: hidden;
 
   span {
     display: block;
     height: 100%;
-    border-radius: var(--radius-pill);
-    background: var(--brand-strong);
-    transition: width 0.3s ease;
+    background: var(--ok);
   }
 }
 
 .progressText {
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-}
-
-// Плашка-объяснение: не «ещё одна метка», а причина, по которой карточка
-// требует внимания. Поэтому текст полный, а не сокращённый до бейджа.
-.note {
-  display: flex;
-  align-items: flex-start;
-  gap: 7px;
-  margin-top: 10px;
-  padding: 8px 10px;
-  border-radius: var(--radius-xs);
-  background: var(--note-bg);
-  color: var(--note-text);
-  font-size: 12.5px;
-  line-height: 1.35;
-
-  svg {
-    flex: none;
-    margin-top: 2px;
-  }
 }
 
 .badges {
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
-  margin-top: 10px;
+  margin-bottom: 10px;
 
   &:empty {
-    margin-top: 0;
+    margin-bottom: 0;
   }
 }
 
@@ -203,7 +135,7 @@
   align-items: center;
   gap: 4px;
   padding: 3px 8px;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-xs);
   font-size: 12px;
   font-weight: 500;
   line-height: 1.4;
@@ -230,47 +162,38 @@
   color: var(--accent);
 }
 
-// На плоской карточке светлые чипы сливаются с фоном — возвращаем контраст
-.cardCalm .badge,
-.cardCalm .badgeMuted {
-  background: var(--panel-2);
-}
-
 .footer {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 11px;
-  font-size: 12px;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
   color: var(--muted);
 }
 
-.days,
-.ball {
+.days {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 4px 9px;
-  border-radius: var(--radius-pill);
-  background: var(--chip-muted-bg);
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.cardCalm .days,
-.cardCalm .ball {
-  background: var(--panel-2);
 }
 
 .warn {
-  background: var(--warn-soft);
   color: var(--warn);
 }
 
 .alert {
-  background: var(--alert-soft);
   color: var(--alert);
   font-weight: 600;
+}
+
+.ball {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
 }
 
 // Иконки не сжимаются и не тянут строку по высоте
@@ -286,7 +209,7 @@
 
 // Разбивка сцен по этапам — проект бывает в нескольких одновременно
 .phases {
-  margin-top: 9px;
+  margin-bottom: 9px;
   font-size: 12px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
