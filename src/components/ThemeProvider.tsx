@@ -6,7 +6,9 @@ export const THEMES = ['dark', 'light'] as const;
 export type Theme = (typeof THEMES)[number];
 
 const STORAGE_KEY = 'viarde.theme';
-export const DEFAULT_THEME: Theme = 'dark';
+// Светлая по умолчанию: интерфейс построен на молочных тонах, тёмная тема —
+// вторая раскладка тех же токенов, а не основной вид
+export const DEFAULT_THEME: Theme = 'light';
 
 interface ThemeValue {
   theme: Theme;

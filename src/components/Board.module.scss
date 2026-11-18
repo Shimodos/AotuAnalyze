@@ -1,44 +1,221 @@
-.root {
-  display: flex;
-  flex-direction: column;
+// ── Оболочка: страница-подложка и «корпус» приложения поверх неё.
+// Корпус — отдельный слой со своим фоном и тенью, поэтому доска читается
+// как физический предмет на столе, а не как содержимое окна браузера.
+.page {
   height: 100vh;
+  padding: 12px;
+  background: var(--bg);
   overflow: hidden;
 }
 
-.header {
+.shell {
+  display: flex;
+  height: 100%;
+  border-radius: var(--radius-xl);
+  background: var(--shell);
+  box-shadow: var(--shadow-shell);
+  overflow: hidden;
+}
+
+// ── Сайдбар
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 236px;
+  min-height: 0;
+  padding: 18px 14px 14px;
+  border-right: 1px solid var(--line-soft);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px 18px;
+}
+
+.brandMark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: var(--radius-sm);
+  background: var(--ink);
+  color: var(--ink-text);
+}
+
+.brandName {
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.navGroup {
+  padding: 12px 8px 5px;
+  color: var(--faint);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+// Список стадий прокручивается сам: колонок семь, а внизу сайдбара
+// живут настройки, которые не должны уезжать за экран
+.navList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.navItem,
+.navItemActive {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+
+  &:hover {
+    background: var(--hover);
+  }
+
+  svg {
+    flex: none;
+    opacity: 0.7;
+  }
+}
+
+// Активная стадия — сплошная зелёная плашка, как единственный цветной
+// элемент меню: взгляд сразу находит, где стоит фильтр
+.navItemActive {
+  background: var(--brand);
+  color: var(--brand-ink);
+
+  &:hover {
+    background: var(--brand-strong);
+  }
+
+  svg {
+    opacity: 0.85;
+  }
+}
+
+.navLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.navCount {
+  flex: none;
+  min-width: 20px;
+  color: var(--muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.navItemActive .navCount {
+  color: var(--brand-ink);
+  opacity: 0.65;
+}
+
+.sidebarFoot {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+// ── Правая часть
+.main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: 18px 20px 0;
+}
+
+.topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  padding: 16px 22px;
-  border-bottom: 1px solid var(--line);
-  background: var(--panel);
   flex-wrap: wrap;
 }
 
 .titleBlock {
   display: flex;
-  align-items: baseline;
-  gap: 14px;
+  flex-direction: column;
   min-width: 0;
 }
 
 .title {
   margin: 0;
-  font-size: 20px;
+  font-size: 26px;
   font-weight: 650;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
 }
 
 .subtitle {
   color: var(--muted);
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .controls {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 8px;
+}
+
+.search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  color: var(--muted);
+  transition: border-color 0.15s ease;
+
+  &:focus-within {
+    border-color: var(--accent);
+  }
+
+  input {
+    width: 190px;
+    border: 0;
+    background: none;
+    color: var(--text);
+    font: inherit;
+    font-size: 14px;
+    outline: none;
+
+    &::placeholder {
+      color: var(--faint);
+    }
+  }
 }
 
 .meta {
@@ -47,41 +224,209 @@
   font-variant-numeric: tabular-nums;
 }
 
-.toggle {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--muted);
-  font-size: 14px;
-  cursor: pointer;
-  user-select: none;
-}
-
+// Главное действие экрана — единственная сплошная тёмная кнопка
 .scanButton {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 9px 16px;
-  border: 1px solid var(--line);
+  height: 38px;
+  padding: 0 16px;
+  border: 0;
   border-radius: var(--radius-sm);
-  background: var(--panel-2);
+  background: var(--ink);
+  color: var(--ink-text);
   font-size: 14px;
-  font-weight: 500;
-  transition:
-    border-color 0.15s ease,
-    background 0.15s ease;
+  font-weight: 550;
+  transition: opacity 0.15s ease;
 
   &:hover:not(:disabled) {
-    border-color: var(--accent);
-    background: var(--hover);
+    opacity: 0.86;
   }
 
   &:disabled {
-    opacity: 0.5;
+    opacity: 0.45;
     cursor: default;
   }
 }
 
+// ── Полоса метрик
+.metrics {
+  display: flex;
+  margin: 16px 0 0;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  overflow-x: auto;
+}
+
+.metric {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1 1 0;
+  min-width: 180px;
+  padding: 12px 16px;
+
+  // Разделители рисуем границей, а не отдельными элементами:
+  // так они не появляются у крайних плиток при переносе
+  & + & {
+    border-left: 1px solid var(--line-soft);
+  }
+}
+
+.metricIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border-radius: var(--radius-sm);
+  background: var(--ink);
+  color: var(--ink-text);
+}
+
+.metricBody {
+  min-width: 0;
+}
+
+.metricLabel {
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.metricValueRow {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.metricValue {
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.metricUnit {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.metricOk,
+.metricWarn,
+.metricAlert,
+.metricNeutral {
+  padding: 2px 8px;
+  border-radius: var(--radius-xs);
+  font-size: 12px;
+  font-weight: 550;
+  white-space: nowrap;
+}
+
+.metricOk {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.metricWarn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.metricAlert {
+  background: var(--alert-soft);
+  color: var(--alert);
+}
+
+.metricNeutral {
+  background: var(--chip-muted-bg);
+  color: var(--chip-muted-text);
+}
+
+// ── Чипы-фильтры
+.filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 16px 0 12px;
+}
+
+.filterDivider {
+  width: 1px;
+  height: 20px;
+  margin: 0 4px;
+  background: var(--line);
+}
+
+.chip,
+.chipActive {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 13px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--chip-muted-bg);
+  color: var(--chip-text);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+
+  &:hover {
+    background: var(--hover);
+  }
+}
+
+// Выбранный фильтр — тёмная плашка: тот же приём, что и у главной кнопки,
+// поэтому включённое состояние видно с любого места экрана
+.chipActive {
+  background: var(--ink);
+  color: var(--ink-text);
+
+  &:hover {
+    background: var(--ink);
+    opacity: 0.9;
+  }
+}
+
+.chipCount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  background: var(--chip-bg);
+  color: var(--chip-text);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.chipActive .chipCount {
+  background: var(--chip-count-overlay);
+  color: var(--ink-text);
+}
+
+.showing {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+// ── Доска
 .boardWrap {
   position: relative;
   flex: 1;
@@ -92,8 +437,8 @@
 .board {
   flex: 1;
   display: flex;
-  gap: 14px;
-  padding: 16px;
+  gap: 12px;
+  padding: 0 0 16px;
   overflow-x: auto;
   overflow-y: hidden;
 }
@@ -101,38 +446,53 @@
 .column {
   display: flex;
   flex-direction: column;
-  flex: 0 0 304px;
+  flex: 0 0 300px;
   min-height: 0;
-  background: var(--panel);
-  border: 1px solid var(--line);
   border-radius: var(--radius);
+  background: var(--panel);
 }
 
 .columnHead {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--line);
+  gap: 8px;
+  padding: 13px 14px 11px;
 }
 
 .columnName {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
-  letter-spacing: 0.02em;
-  color: var(--muted);
+  letter-spacing: -0.01em;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .columnCount {
-  min-width: 24px;
-  padding: 2px 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  flex: none;
+  padding: 0 6px;
   border-radius: var(--radius-pill);
-  background: var(--panel-2);
-  color: var(--muted);
-  font-size: 13px;
-  text-align: center;
+  background: var(--chip-bg);
+  color: var(--chip-text);
+  font-size: 12px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
+}
+
+// Правая подпись шапки колонки — норматив стадии, как «target 5m»
+.columnMeta {
+  margin-left: auto;
+  flex: none;
+  color: var(--faint);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .columnBody {
@@ -142,8 +502,8 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 12px;
+  gap: 10px;
+  padding: 0 10px 10px;
   overflow-y: auto;
   // По оси Y — contain: докрутили колонку до конца, дальше ничего не уезжает.
   // По оси X — auto обязателен: overflow-y: auto делает элемент скролл-контейнером
@@ -153,22 +513,27 @@
 }
 
 .columnEmpty {
-  padding: 8px 2px;
+  padding: 6px 4px 10px;
   color: var(--faint);
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .error {
-  margin: 14px 22px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 14px;
   padding: 12px 14px;
-  border: 1px solid var(--alert);
   border-radius: var(--radius-sm);
+  background: var(--alert-soft);
   color: var(--alert);
   font-size: 14px;
+  word-break: break-all;
 }
 
 .empty {
-  padding: 22px;
+  padding: 22px 0;
   color: var(--muted);
   font-size: 15px;
 }
@@ -178,12 +543,10 @@
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  margin: 14px 22px 0;
+  margin-top: 14px;
   padding: 12px 14px;
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--accent);
   border-radius: var(--radius-sm);
-  background: var(--panel-2);
+  background: var(--accent-soft);
   color: var(--text);
   font-size: 14px;
   word-break: break-all;
@@ -196,7 +559,6 @@
   border: 0;
   background: none;
   color: var(--muted);
-  font-size: 15px;
   line-height: 1;
 
   &:hover {
@@ -224,26 +586,21 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 90px;
+  width: 80px;
   display: flex;
   align-items: center;
   pointer-events: none;
   color: var(--muted);
-  opacity: 0.45;
+  opacity: 0.4;
   transition:
     opacity 0.15s ease,
     color 0.15s ease;
-
-  svg {
-    filter: drop-shadow(0 1px 3px var(--shadow));
-  }
 }
 
 .edgeLeft,
 .edgeLeftActive {
   left: 0;
   justify-content: flex-start;
-  padding-left: 6px;
   background: linear-gradient(to right, var(--edge-fade), transparent);
 }
 
@@ -251,7 +608,6 @@
 .edgeRightActive {
   right: 0;
   justify-content: flex-end;
-  padding-right: 6px;
   background: linear-gradient(to left, var(--edge-fade), transparent);
 }
 
@@ -261,23 +617,22 @@
   color: var(--accent);
 }
 
-// ── Переключатель языка и кнопка темы
+// ── Переключатель языка и кнопки в подвале сайдбара
 .langSwitch {
   display: inline-flex;
   padding: 2px;
-  border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  background: var(--panel-2);
+  background: var(--chip-muted-bg);
 }
 
 .langOption,
 .langActive {
-  padding: 5px 11px;
+  padding: 5px 10px;
   border: 0;
   border-radius: var(--radius-xs);
   background: none;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.02em;
   transition:
@@ -290,25 +645,28 @@
 }
 
 .langActive {
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--panel-2);
+  color: var(--text);
+  box-shadow: var(--shadow-card);
 }
 
 .iconToggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 8px;
-  border: 1px solid var(--line);
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border: 0;
   border-radius: var(--radius-sm);
-  background: var(--panel-2);
+  background: var(--chip-muted-bg);
   color: var(--muted);
   transition:
-    border-color 0.15s ease,
+    background 0.15s ease,
     color 0.15s ease;
 
   &:hover {
-    border-color: var(--accent);
+    background: var(--hover);
     color: var(--text);
   }
 }

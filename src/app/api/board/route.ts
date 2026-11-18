@@ -14,6 +14,8 @@ export interface BoardCard {
   key: string;
   jobNumber: number | null;
   title: string;
+  /** имя папки проекта — по нему ищет строка поиска на доске */
+  folderName: string;
   path: string;
   /** ссылка на эту папку в веб-версии Dropbox */
   webUrl: string | null;
@@ -120,6 +122,7 @@ function buildBoard(): BoardData {
     key: r.key,
     jobNumber: r.jobNumber,
     title: r.title,
+    folderName: r.folderName,
     path: r.path,
     webUrl: folderWebUrl(r.path),
     column: r.isPinned && r.pinnedColumn ? r.pinnedColumn : r.column,
