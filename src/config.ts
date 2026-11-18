@@ -9,6 +9,14 @@ export const CONFIG = {
   // потерять при экранировании — путь тогда молча становится drive-relative.
   root: process.env.VIARDE_ROOT ?? 'D:/Viarde Studio Dropbox',
 
+  /**
+   * Откуда скан берёт дерево проектов: 'api' — индекс из Dropbox API
+   * (диск не читается), 'disk' — обход локальной папки. По умолчанию 'api';
+   * пока Dropbox не подключён, скан сам идёт по диску. VIARDE_SOURCE=disk
+   * возвращает прежнее поведение целиком.
+   */
+  source: (process.env.VIARDE_SOURCE === 'disk' ? 'disk' : 'api') as 'api' | 'disk',
+
   /** Папки в корне, которые НЕ являются проектами */
   notProjects: ['Kraus_Start', 'Kraus_1001_Small_task'],
 

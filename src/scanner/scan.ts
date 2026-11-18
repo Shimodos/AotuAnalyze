@@ -10,11 +10,11 @@
  */
 
 import { createHash } from 'node:crypto';
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { CONFIG, type DeliveryKind, type ScenePhase } from '@/config';
 import type { Localized } from '@/i18n/types';
 import { NO_CACHE, type ScanCache } from './cache';
+import { scanFs, type ScanEntry, type ScanStat } from './fs';
 import { assignPlans, findPlanFile, parsePlan, type ScenePlan } from './plan';
 import {
   isImage,
@@ -102,9 +102,9 @@ export interface ScannedProject {
   sizeBytes: number | null;
 }
 
-function listEntries(dir: string): fs.Dirent[] {
+function listEntries(dir: string): ScanEntry[] {
   try {
-    return fs.readdirSync(dir, { withFileTypes: true });
+    return scanFs().readdir(dir);
   } catch {
     return [];
   }
@@ -118,7 +118,7 @@ function listDirs(dir: string): string[] {
 
 function exists(p: string): boolean {
   try {
-    return fs.existsSync(p);
+    return scanFs().exists(p);
   } catch {
     return false;
   }
@@ -142,15 +142,15 @@ interface DirTree {
 
 function readTree(dir: string, depth = 0): DirTree | null {
   if (depth > CONFIG.outboxScanDepth) return null;
-  let entries: fs.Dirent[];
+  let entries: ScanEntry[];
   try {
-    entries = fs.readdirSync(dir, { withFileTypes: true });
+    entries = scanFs().readdir(dir);
   } catch {
     return null;
   }
   let mtimeMs = 0;
   try {
-    mtimeMs = fs.statSync(dir).mtimeMs;
+    mtimeMs = scanFs().stat(dir).mtimeMs;
   } catch {
     /* каталог исчез между readdir и stat — отпечаток просто не совпадёт в следующий раз */
   }
@@ -204,7 +204,7 @@ function summarizeTree(tree: DirTree): FolderSummary {
     const full = path.join(tree.dir, name);
     out.fileCount++;
     try {
-      const stat = fs.statSync(full);
+      const stat = scanFs().stat(full);
       if (!out.newest || stat.mtime > out.newest) out.newest = stat.mtime;
       if (isImage(name) && stat.size >= CONFIG.minFileSize) {
         if (!out.coverAt || stat.mtime > out.coverAt) {
@@ -292,9 +292,9 @@ function scanImages(dir: string): ImageScan {
     }
     if (isNoiseFile(e.name) || !isImage(e.name)) continue;
 
-    let stat: fs.Stats;
+    let stat: ScanStat;
     try {
-      stat = fs.statSync(full);
+      stat = scanFs().stat(full);
     } catch {
       continue;
     }
@@ -328,9 +328,9 @@ function countPsd(dir: string): {
   newest: Date | null;
   stages: SceneVersion[];
 } {
-  let entries: fs.Dirent[];
+  let entries: ScanEntry[];
   try {
-    entries = fs.readdirSync(dir, { withFileTypes: true });
+    entries = scanFs().readdir(dir);
   } catch {
     return { count: 0, newest: null, stages: [] };
   }
@@ -347,7 +347,7 @@ function countPsd(dir: string): {
     if (!/\.psd$/i.test(e.name)) continue;
     count++;
     try {
-      const m = fs.statSync(full).mtime;
+      const m = scanFs().stat(full).mtime;
       if (!newest || m > newest) newest = m;
     } catch {
       /* файл исчез между readdir и stat */
@@ -373,9 +373,9 @@ function countImagesFlat(dir: string): number {
 /** Суммарный вес папки. Дорого (полный обход) — только для отчёта по месту. */
 function folderSize(dir: string): number {
   let total = 0;
-  let entries: fs.Dirent[];
+  let entries: ScanEntry[];
   try {
-    entries = fs.readdirSync(dir, { withFileTypes: true });
+    entries = scanFs().readdir(dir);
   } catch {
     return 0;
   }
@@ -384,7 +384,7 @@ function folderSize(dir: string): number {
     if (e.isDirectory()) total += folderSize(full);
     else {
       try {
-        total += fs.statSync(full).size;
+        total += scanFs().stat(full).size;
       } catch {
         /* пропускаем */
       }

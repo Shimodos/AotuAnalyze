@@ -11,10 +11,10 @@
  * должно быть», но и какие именно кадры уже сделаны, а каких не хватает.
  */
 
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as XLSX from 'xlsx';
 import { NO_CACHE, type ScanCache } from './cache';
+import { DISK_FS, scanFs, type ScanEntry } from './fs';
 
 export interface PlanGroup {
   /** имя листа: Interior, Studio, Render Tasks */
@@ -50,10 +50,10 @@ function isFileRow(value: string): boolean {
  * Содержимое каталога можно передать снаружи — сканер читает 01_Clients
  * и для других целей, второй раз ходить на диск незачем.
  */
-export function findPlanFile(clientsDir: string, entries?: fs.Dirent[]): string | null {
+export function findPlanFile(clientsDir: string, entries?: ScanEntry[]): string | null {
   if (!entries) {
     try {
-      entries = fs.readdirSync(clientsDir, { withFileTypes: true });
+      entries = scanFs().readdir(clientsDir);
     } catch {
       return null;
     }
@@ -73,7 +73,7 @@ export function findPlanFile(clientsDir: string, entries?: fs.Dirent[]): string 
   // оставляют. mtime считаем один раз на кандидата, а не внутри компаратора.
   const mtimeOf = (name: string) => {
     try {
-      return fs.statSync(path.join(clientsDir, name)).mtimeMs;
+      return scanFs().stat(path.join(clientsDir, name)).mtimeMs;
     } catch {
       return 0;
     }
@@ -89,18 +89,29 @@ export function findPlanFile(clientsDir: string, entries?: fs.Dirent[]): string 
  * по отпечатку «mtime + размер». Кеш передаёт вызывающий (в сервере — SQLite,
  * потому что скан идёт отдельным процессом и память между сканами не живёт).
  */
-export function parsePlan(filePath: string, cache: ScanCache = NO_CACHE): PlanGroup[] {
-  let stamp: string;
+/** Ключ и отпечаток плана в кеше; null — файла нет */
+export function planCacheRef(filePath: string): { key: string; stamp: string } | null {
   try {
-    const st = fs.statSync(filePath);
-    stamp = `${st.mtimeMs}:${st.size}`;
+    const st = scanFs().stat(filePath);
+    return { key: 'plan:' + filePath, stamp: `${st.mtimeMs}:${st.size}` };
   } catch {
-    return [];
+    return null;
   }
+}
 
-  const key = 'plan:' + filePath;
+export function parsePlan(filePath: string, cache: ScanCache = NO_CACHE): PlanGroup[] {
+  const ref = planCacheRef(filePath);
+  if (!ref) return [];
+  const { key, stamp } = ref;
+
   const hit = cache.get<PlanGroup[]>(key, stamp);
   if (hit) return hit;
+
+  // Содержимое таблицы есть только на диске. Когда источник — индекс Dropbox,
+  // план заранее скачивается через API и кладётся в кеш (remote/plans.ts);
+  // промах кеша там означает «скачать не удалось», а не «читай с диска»:
+  // чтение онлайн-заглушки заставило бы Dropbox её качать.
+  if (scanFs() !== DISK_FS) return [];
 
   let workbook: XLSX.WorkBook;
   try {
@@ -116,6 +127,13 @@ export function parsePlan(filePath: string, cache: ScanCache = NO_CACHE): PlanGr
     return [];
   }
 
+  const filled = parseWorkbook(workbook);
+  cache.set(key, stamp, filled);
+  return filled;
+}
+
+/** Группы кадров из уже открытой книги — общее для чтения с диска и скачанного через API */
+export function parseWorkbook(workbook: XLSX.WorkBook): PlanGroup[] {
   const groups: PlanGroup[] = [];
 
   for (const sheet of workbook.SheetNames) {
@@ -146,9 +164,7 @@ export function parsePlan(filePath: string, cache: ScanCache = NO_CACHE): PlanGr
     }
   }
 
-  const filled = groups.filter((g) => g.files.length > 0);
-  cache.set(key, stamp, filled);
-  return filled;
+  return groups.filter((g) => g.files.length > 0);
 }
 
 /**

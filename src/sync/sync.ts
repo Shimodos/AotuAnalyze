@@ -5,6 +5,8 @@
 import { desc, eq, sql } from 'drizzle-orm';
 import { CONFIG, type Column } from '@/config';
 import { getDb, schema } from '@/db';
+import { syncRemote } from '@/remote';
+import { scanFromIndex } from '@/remote/scan';
 import { scanAll, type ScannedProject } from '@/scanner/scan';
 import { computeStage } from '@/scanner/stage';
 import { SqliteCache } from './cache';
@@ -81,6 +83,48 @@ export interface SyncOptions {
   withSizes?: boolean;
   /** запись в scan_runs уже создал тот, кто нас запустил (sync/launch.ts) */
   runId?: number;
+  /** проекты уже просканированы снаружи (скан по индексу Dropbox) — диск не обходим */
+  scanned?: ScannedProject[];
+  /** когда на самом деле начался скан, если часть работы сделана до вызова */
+  startedAt?: Date;
+}
+
+/**
+ * Скан по индексу Dropbox: обновить индекс, просканировать его и записать
+ * результат тем же путём, что и дисковый скан. Асинхронная часть — только
+ * сеть; запись в базу остаётся синхронной и общей с обходом диска.
+ */
+export async function syncOnceFromIndex(options: SyncOptions = {}): Promise<SyncResult> {
+  const db = getDb();
+  const startedAt = new Date();
+  const runId =
+    options.runId ??
+    db
+      .insert(schema.scanRuns)
+      .values({ startedAt, withSizes: false })
+      .returning({ id: schema.scanRuns.id })
+      .get().id;
+
+  let scanned: ScannedProject[];
+  try {
+    await syncRemote();
+    scanned = (await scanFromIndex(options.root ?? CONFIG.root)).projects;
+  } catch (error) {
+    // Сеть недоступна или Dropbox отказал. На диск молча не откатываемся:
+    // это вернуло бы ту нагрузку, от которой уходили. Доска покажет прежние
+    // данные, а запись о скане — причину.
+    db.update(schema.scanRuns)
+      .set({
+        finishedAt: new Date(),
+        durationMs: Date.now() - startedAt.getTime(),
+        error: error instanceof Error ? error.message : String(error),
+      })
+      .where(eq(schema.scanRuns.id, runId))
+      .run();
+    throw error;
+  }
+
+  return syncOnce({ ...options, runId, scanned, startedAt });
 }
 
 export function syncOnce(options: SyncOptions = {}): SyncResult {
@@ -95,7 +139,7 @@ export function syncOnce(options: SyncOptions = {}): SyncResult {
 
 function runSync(options: SyncOptions): SyncResult {
   const db = getDb();
-  const startedAt = new Date();
+  const startedAt = options.startedAt ?? new Date();
 
   // Запись создаём ДО обхода: пока он идёт, доска и второй процесс видят
   // startedAt без finishedAt и не запускают свой скан параллельно.
@@ -115,7 +159,7 @@ function runSync(options: SyncOptions): SyncResult {
 
   let scanned: ScannedProject[];
   try {
-    scanned = scanAll(options.root ?? CONFIG.root, options.withSizes ?? false, cache);
+    scanned = options.scanned ?? scanAll(options.root ?? CONFIG.root, options.withSizes ?? false, cache);
   } catch (error) {
     // Упавший скан тоже закрываем: иначе запись висит «идущей», а доска
     // после диска, который отвалился, не сможет ни отступить, ни повторить.
