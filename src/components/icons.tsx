@@ -22,6 +22,7 @@ export {
   Pin,
   RefreshCw,
   Send,
+  Settings,
   Sun,
   TriangleAlert,
   Users,

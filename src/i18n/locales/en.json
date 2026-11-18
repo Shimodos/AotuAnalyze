@@ -152,5 +152,17 @@
   "checklist.loading": "Loading…",
   "checklist.close": "Close",
   "checklist.hint": "Tick the frames you have already fixed. Each revision round keeps its own list; earlier ones are preserved.",
-  "checklist.saving": "saving…"
+  "checklist.saving": "saving…",
+  "tracked.title": "Projects on the board",
+  "tracked.hint": "The tracker follows only the projects you tick",
+  "tracked.summary": "Tracking {tracked} of {total} Dropbox folders",
+  "tracked.search": "Search by folder name",
+  "tracked.onlyTracked": "tracked only",
+  "tracked.listLoading": "reading the folder list from Dropbox…",
+  "tracked.loading": "loading…",
+  "tracked.files": "files: {count}",
+  "tracked.new": "new, not tracked",
+  "tracked.missing": "folder is gone from Dropbox",
+  "tracked.empty": "nothing found",
+  "tracked.error": "could not load the project list (HTTP {status})"
 }

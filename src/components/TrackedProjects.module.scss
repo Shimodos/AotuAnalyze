@@ -1,0 +1,178 @@
+// Настройка списка отслеживаемых проектов. Открывается с доски, поверх неё.
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--overlay);
+}
+
+.sheet {
+  display: flex;
+  flex-direction: column;
+  width: min(680px, 100%);
+  max-height: 100%;
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: 0 24px 70px var(--shadow);
+  overflow: hidden;
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 18px 20px 12px;
+}
+
+.title {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+}
+
+.subtitle {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--chip-muted-bg);
+  color: var(--muted);
+  cursor: pointer;
+
+  &:hover {
+    color: var(--text);
+  }
+}
+
+.tools {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 20px 12px;
+}
+
+.search {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--sunken);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+
+  &:focus {
+    outline: 2px solid var(--accent-soft);
+    border-color: var(--accent);
+  }
+}
+
+.only {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.list {
+  margin: 0;
+  padding: 0 8px 12px;
+  list-style: none;
+  overflow-y: auto;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  border-radius: var(--radius-xs);
+  font-size: 14px;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--hover);
+  }
+}
+
+.job {
+  flex: none;
+  width: 38px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chip,
+.chipMuted,
+.chipNew,
+.chipAlert {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.chip {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.chipMuted {
+  background: var(--chip-muted-bg);
+  color: var(--chip-muted-text);
+}
+
+.chipNew {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.chipAlert {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.muted {
+  padding: 14px 20px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.failure {
+  margin: 0 20px 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--warn-soft);
+  color: var(--alert);
+  font-size: 13px;
+}

@@ -234,3 +234,35 @@ export const sceneChecks = sqliteTable(
   },
   (t) => [index('scene_checks_scene_idx').on(t.projectKey, t.sceneName)],
 );
+
+/**
+ * Проекты, за которыми трекер следит через Dropbox API.
+ * syncedAt === null — дерево проекта ещё не загружено или его нужно перечитать.
+ */
+export const trackedProjects = sqliteTable('tracked_projects', {
+  /** тот же ключ, что у projects: job:211 */
+  key: text('key').primaryKey(),
+  /** имя папки в корне Dropbox на момент последней синхронизации */
+  folderName: text('folder_name').notNull(),
+  addedAt: integer('added_at', { mode: 'timestamp_ms' }).notNull(),
+  syncedAt: integer('synced_at', { mode: 'timestamp_ms' }),
+});
+
+/** Индекс дерева отслеживаемых проектов из Dropbox API (см. remote/index.ts) */
+export const remoteEntries = sqliteTable(
+  'remote_entries',
+  {
+    /** путь от корня Dropbox в нижнем регистре — так его отдаёт API */
+    pathLower: text('path_lower').primaryKey(),
+    projectKey: text('project_key').notNull(),
+    pathDisplay: text('path_display').notNull(),
+    name: text('name').notNull(),
+    isDir: integer('is_dir', { mode: 'boolean' }).notNull().default(false),
+    size: integer('size'),
+    /** дата файла, как её видит диск (mtime) — проверено пробой этапа 0 */
+    clientModified: integer('client_modified', { mode: 'timestamp_ms' }),
+    serverModified: integer('server_modified', { mode: 'timestamp_ms' }),
+    rev: text('rev'),
+  },
+  (t) => [index('remote_entries_project_idx').on(t.projectKey)],
+);

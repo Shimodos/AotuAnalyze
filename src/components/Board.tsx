@@ -9,8 +9,9 @@ import { useTheme } from './ThemeProvider';
 import { Card } from './Card';
 import { DropboxStatus } from './DropboxStatus';
 import { ApiError, fetchJson } from './fetchJson';
-import { Archive, ChevronLeft, ChevronRight, ICON, ICON_SM, Moon, RefreshCw, Sun, X } from './icons';
+import { Archive, ChevronLeft, ChevronRight, ICON, ICON_SM, Moon, RefreshCw, Settings, Sun, X } from './icons';
 import { ProjectPanel } from './ProjectPanel';
+import { TrackedProjects } from './TrackedProjects';
 import { useEdgeScroll } from './useEdgeScroll';
 import { useOpenFolder } from './useOpenFolder';
 import styles from './Board.module.scss';
@@ -19,6 +20,7 @@ export function Board() {
   const queryClient = useQueryClient();
   const [showArchive, setShowArchive] = useState(false);
   const [openKey, setOpenKey] = useState<string | null>(null);
+  const [showTracked, setShowTracked] = useState(false);
   const { openFolder, copyLink, notice, dismissNotice } = useOpenFolder();
   const { t, lang, locale, setLang } = useI18n();
   const { theme, toggleTheme } = useTheme();
@@ -106,6 +108,9 @@ export function Board() {
             ))}
           </div>
           <DropboxStatus />
+          <button className={styles.iconToggle} onClick={() => setShowTracked(true)} title={t('tracked.title')}>
+            <Settings {...ICON} />
+          </button>
           <button
             className={styles.iconToggle}
             onClick={toggleTheme}
@@ -183,6 +188,8 @@ export function Board() {
           </div>
         )}
       </div>
+
+      {showTracked && <TrackedProjects onClose={() => setShowTracked(false)} />}
 
       {openKey && (
         <ProjectPanel

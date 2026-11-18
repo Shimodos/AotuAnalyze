@@ -152,5 +152,17 @@
   "checklist.loading": "Завантажую…",
   "checklist.close": "Закрити",
   "checklist.hint": "Позначайте кадри, у які вже внесли правки. Кожне коло правок має власний список, попередні зберігаються.",
-  "checklist.saving": "зберігаю…"
+  "checklist.saving": "зберігаю…",
+  "tracked.title": "Проєкти на дошці",
+  "tracked.hint": "Трекер стежить лише за позначеними проєктами",
+  "tracked.summary": "Відстежується {tracked} з {total} тек у Dropbox",
+  "tracked.search": "Пошук за назвою теки",
+  "tracked.onlyTracked": "лише відстежувані",
+  "tracked.listLoading": "читаю список тек із Dropbox…",
+  "tracked.loading": "завантажується…",
+  "tracked.files": "файлів: {count}",
+  "tracked.new": "нова, не відстежується",
+  "tracked.missing": "теки немає в Dropbox",
+  "tracked.empty": "нічого не знайдено",
+  "tracked.error": "не вдалося отримати список проєктів (HTTP {status})"
 }

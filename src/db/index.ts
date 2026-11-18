@@ -169,6 +169,32 @@ CREATE TABLE IF NOT EXISTS file_cache (
   value TEXT NOT NULL,
   updated_at INTEGER NOT NULL
 );
+
+-- Проекты, за которыми трекер следит через Dropbox API (docs/PLAN-DROPBOX-API.md).
+-- Через API в корне видно в разы больше папок, чем синхронизировано на диск,
+-- поэтому список явный. synced_at IS NULL — дерево проекта ещё не загружено
+-- (или его нужно перечитать): загрузка идёт по проектам и переживает обрыв.
+CREATE TABLE IF NOT EXISTS tracked_projects (
+  key TEXT PRIMARY KEY,
+  folder_name TEXT NOT NULL,
+  added_at INTEGER NOT NULL,
+  synced_at INTEGER
+);
+
+-- Индекс дерева отслеживаемых проектов: то, что сканер раньше узнавал
+-- обходом диска. Только значимые для стадий папки, см. remote/index.ts.
+CREATE TABLE IF NOT EXISTS remote_entries (
+  path_lower TEXT PRIMARY KEY,
+  project_key TEXT NOT NULL,
+  path_display TEXT NOT NULL,
+  name TEXT NOT NULL,
+  is_dir INTEGER NOT NULL DEFAULT 0,
+  size INTEGER,
+  client_modified INTEGER,
+  server_modified INTEGER,
+  rev TEXT
+);
+CREATE INDEX IF NOT EXISTS remote_entries_project_idx ON remote_entries(project_key);
 `;
 
 function addColumnIfMissing(
