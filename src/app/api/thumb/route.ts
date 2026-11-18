@@ -6,12 +6,17 @@ import { desc, eq, isNotNull, and } from 'drizzle-orm';
 import sharp from 'sharp';
 import { CONFIG } from '@/config';
 import { getDb, schema } from '@/db';
+import { dropboxContent, dropboxPathOf } from '@/dropbox/content';
+import { isConnected } from '@/dropbox/tokens';
 import { isImage, isNoiseFile } from '@/scanner/parse';
 import { isInsideRoot } from '@/server/paths';
 
 export const dynamic = 'force-dynamic';
 
 const CACHE_DIR = path.join(process.cwd(), CONFIG.thumbCacheDir);
+
+/** Размер превью у Dropbox; проверен пробой этапа 0 (scripts/probe-list.ts) */
+const API_THUMB_SIZE = 'w640h480';
 
 /** Сколько соседних картинок из папки сцены перебираем, если обложки из базы не читаются */
 const FOLDER_FALLBACK_LIMIT = 12;
@@ -62,10 +67,23 @@ export async function GET(request: Request) {
     }
   }
 
+  // Когда данные идут из Dropbox API, превью берём там же: файл на диске не
+  // открывается вообще, и не важно, скачан он, лежит заглушкой или папки
+  // проекта на этой машине нет. Диск остаётся запасным путём — для форматов,
+  // которым Dropbox превью не делает, и на случай, когда сеть недоступна.
+  const useApi = CONFIG.source === 'api' && isConnected();
+
   for (const candidate of candidates) {
+    if (useApi) {
+      const body = await apiThumb(candidate);
+      if (body) return image(body, 'image/jpeg');
+    }
     const body = await renderThumb(candidate);
-    if (body) return webp(body);
+    if (body) return image(body, 'image/webp');
   }
+
+  // Дальше — обход папки на диске; при работе через API его не делаем
+  if (useApi) return new NextResponse('не удалось построить превью', { status: 415 });
 
   // Все обложки из базы — заглушки (так бывает, когда весь свежий рендер
   // пришёл с другой машины). Тогда в тех же папках ищем самую свежую картинку,
@@ -76,17 +94,17 @@ export async function GET(request: Request) {
     for (const candidate of await siblingImages(dir, FOLDER_FALLBACK_LIMIT)) {
       if (tried.has(path.resolve(candidate.path))) continue;
       const body = await renderThumb(candidate);
-      if (body) return webp(body);
+      if (body) return image(body, 'image/webp');
     }
   }
 
   return new NextResponse('не удалось построить превью', { status: 415 });
 }
 
-function webp(body: Buffer) {
+function image(body: Buffer, type: 'image/webp' | 'image/jpeg') {
   return new NextResponse(new Uint8Array(body), {
     headers: {
-      'Content-Type': 'image/webp',
+      'Content-Type': type,
       'Cache-Control': 'public, max-age=86400',
     },
   });
@@ -132,6 +150,49 @@ async function siblingImages(dir: string, limit: number): Promise<Candidate[]> {
   return found
     .sort((a, b) => (b.at?.getTime() ?? 0) - (a.at?.getTime() ?? 0))
     .slice(0, limit);
+}
+
+/**
+ * Превью одного кандидата через Dropbox API; null — не получилось.
+ *
+ * Кеш тот же, что у дискового пути, но под своим ключом: Dropbox отдаёт jpeg
+ * своего размера, а с диска мы делаем webp. Дата берётся из базы — без неё
+ * не понять, устарел ли кеш, поэтому кандидата без даты отдаём дисковому пути.
+ */
+async function apiThumb(candidate: Candidate): Promise<Buffer | null> {
+  if (!candidate.at) return null;
+  const remote = dropboxPathOf(candidate.path);
+  if (!remote) return null;
+
+  const hash = crypto
+    .createHash('sha1')
+    .update(`api:${remote.toLowerCase()}:${candidate.at.getTime()}:${API_THUMB_SIZE}`)
+    .digest('hex');
+  const cached = path.join(CACHE_DIR, `${hash}.jpg`);
+
+  try {
+    return fs.readFileSync(cached);
+  } catch {
+    /* в кеше нет — запрашиваем */
+  }
+
+  try {
+    const res = await dropboxContent('files/get_thumbnail_v2', {
+      resource: { '.tag': 'path', path: remote },
+      format: 'jpeg',
+      size: API_THUMB_SIZE,
+      mode: 'fitone_bestfit',
+    });
+    // 409 — формат без превью (exr, psd) или файл слишком большой; 429 — лимит.
+    // В обоих случаях пробуем следующего кандидата, в кеш отказ не кладём.
+    if (!res.ok) return null;
+    const body = Buffer.from(await res.arrayBuffer());
+    fs.mkdirSync(CACHE_DIR, { recursive: true });
+    fs.writeFileSync(cached, body);
+    return body;
+  } catch {
+    return null;
+  }
 }
 
 /** Превью одного кандидата из кеша или с диска; null — файл не читается */
