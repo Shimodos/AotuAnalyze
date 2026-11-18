@@ -9,11 +9,11 @@ import { getDb, schema } from '@/db';
 import { dropboxContent, dropboxPathOf } from '@/dropbox/content';
 import { isConnected } from '@/dropbox/tokens';
 import { isImage, isNoiseFile } from '@/scanner/parse';
-import { isInsideRoot } from '@/server/paths';
+import { dataDir, isInsideRoot } from '@/server/paths';
 
 export const dynamic = 'force-dynamic';
 
-const CACHE_DIR = path.join(process.cwd(), CONFIG.thumbCacheDir);
+const CACHE_DIR = path.join(dataDir(), CONFIG.thumbCacheDir);
 
 /** Размер превью у Dropbox; проверен пробой этапа 0 (scripts/probe-list.ts) */
 const API_THUMB_SIZE = 'w640h480';

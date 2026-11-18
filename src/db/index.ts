@@ -2,9 +2,10 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
+import { dataDir } from '@/server/paths';
 import * as schema from './schema';
 
-const DB_PATH = process.env.VIARDE_DB ?? path.join(process.cwd(), 'data', 'tracker.db');
+const DB_PATH = process.env.VIARDE_DB ?? path.join(dataDir(), 'data', 'tracker.db');
 
 /**
  * DDL держим здесь, а не в drizzle-kit: одна таблица правды, применяется идемпотентно

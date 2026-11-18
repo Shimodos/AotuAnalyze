@@ -18,6 +18,8 @@ const KEYS = {
   accountName: 'dropbox.account_name',
   accountEmail: 'dropbox.account_email',
   rootNamespaceId: 'dropbox.root_namespace_id',
+  /** '1' — токен получен по PKCE и обновляется без секрета приложения */
+  pkce: 'dropbox.pkce',
 } as const;
 
 export function readSetting(key: string): string | null {
@@ -56,11 +58,12 @@ export function getAccount(): DropboxAccount {
   };
 }
 
-export function saveTokens(payload: {
-  access_token: string;
-  refresh_token?: string;
-  expires_in?: number;
-}) {
+export function saveTokens(
+  payload: { access_token: string; refresh_token?: string; expires_in?: number },
+  /** задаётся только при новом входе; при обновлении токена способ не меняется */
+  origin?: { pkce: boolean },
+) {
+  if (origin) writeSetting(KEYS.pkce, origin.pkce ? '1' : null);
   writeSetting(KEYS.accessToken, payload.access_token);
   if (payload.refresh_token) writeSetting(KEYS.refreshToken, payload.refresh_token);
   if (payload.expires_in) {
@@ -98,8 +101,16 @@ export async function getAccessToken(): Promise<string> {
     grant_type: 'refresh_token',
     refresh_token: refreshToken,
     client_id: DROPBOX.appKey,
-    client_secret: DROPBOX.appSecret,
   });
+
+  // Токен, полученный по PKCE, обновляется без секрета. Подключение, сделанное
+  // до PKCE, получено с секретом и без него не обновится.
+  if (readSetting(KEYS.pkce) !== '1') {
+    if (!DROPBOX.appSecret) {
+      throw new Error('Подключение к Dropbox устарело: отключите Dropbox и подключите заново');
+    }
+    body.set('client_secret', DROPBOX.appSecret);
+  }
 
   const res = await fetch(DROPBOX.tokenUrl, {
     method: 'POST',

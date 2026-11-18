@@ -1,12 +1,15 @@
 /**
  * Настройки подключения к Dropbox.
  *
- * Секрет приложения живёт только на сервере: все роуты в src/app/api/dropbox
- * серверные, в клиентский бандл он не попадает.
+ * Вход идёт по PKCE: для него нужен только ключ приложения, он не секретный.
+ * Секрет остаётся необязательным и нужен лишь подключениям, сделанным до
+ * перехода на PKCE: их refresh-токен без секрета не обновляется. Живёт он
+ * только на сервере, в клиентский бандл не попадает.
  */
 
 export const DROPBOX = {
   appKey: process.env.DROPBOX_APP_KEY ?? '',
+  /** только для старых подключений, см. выше */
   appSecret: process.env.DROPBOX_APP_SECRET ?? '',
   redirectUri: process.env.DROPBOX_REDIRECT_URI ?? 'http://localhost:3000/api/dropbox/callback',
 
@@ -26,5 +29,5 @@ export const DROPBOX = {
 } as const;
 
 export function isConfigured(): boolean {
-  return Boolean(DROPBOX.appKey && DROPBOX.appSecret);
+  return Boolean(DROPBOX.appKey);
 }
