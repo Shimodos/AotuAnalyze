@@ -33,7 +33,11 @@ export function Board() {
     // CONFIG.boardRefreshMs. Опрос нужен, чтобы подхватить результат скана;
     // рендер идёт десятками минут, пяти минут хватает. Пока скан идёт —
     // чаще, чтобы результат появился без лишнего ожидания.
-    refetchInterval: (query) => (query.state.data?.scanning ? 5_000 : 5 * 60_000),
+    // В режиме Dropbox API скан приходит сам, по сигналу об изменении, и опрос
+    // раз в 5 минут прятал бы его результат: опрашиваем каждые 20 с. Запрос
+    // дешёвый — чтение из базы, диск не трогается.
+    refetchInterval: (query) =>
+      query.state.data?.scanning ? 5_000 : query.state.data?.live ? 20_000 : 5 * 60_000,
   });
 
   const scanning = data?.scanning ?? false;

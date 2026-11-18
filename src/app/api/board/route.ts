@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { desc, eq, isNotNull, sql } from 'drizzle-orm';
 import { COLUMNS, CONFIG, type Ball, type Column } from '@/config';
 import { getDb, schema } from '@/db';
+import { isConnected } from '@/dropbox/tokens';
 import { folderWebUrl } from '@/dropbox/webUrl';
 import { errorMessage, jsonError } from '@/server/http';
 import { scanIfStale } from '@/sync/launch';
@@ -59,6 +60,11 @@ export interface BoardData {
   lastScan: { at: number | null; durationMs: number | null; projectCount: number | null } | null;
   /** скан идёт прямо сейчас — доска опрашивает чаще, кнопка заблокирована */
   scanning: boolean;
+  /**
+   * Данные приходят из Dropbox API и обновляются по сигналу об изменениях —
+   * доске есть смысл опрашивать сервер часто, чтобы показать их без задержки
+   */
+  live: boolean;
 }
 
 /**
@@ -154,5 +160,6 @@ function buildBoard(): BoardData {
         }
       : null,
     scanning: findRunningScan() !== null,
+    live: CONFIG.source === 'api' && process.env.VIARDE_WATCH !== 'off' && isConnected(),
   };
 }

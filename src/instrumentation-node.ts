@@ -14,7 +14,20 @@
  * пока правят код. Включить принудительно: VIARDE_AUTOSCAN=on
  */
 
+import { CONFIG } from '@/config';
+import { startWatcher } from '@/remote/watch';
 import { scanIfStale } from '@/sync/launch';
+
+/**
+ * Когда данные идут из Dropbox API, главный источник сканов — не таймер, а
+ * наблюдатель: он ждёт сигнала об изменении от самого Dropbox и запускает скан
+ * сразу (remote/watch.ts). Работает и в dev: он ничего не сканирует в процессе
+ * сервера и не держит устаревший код — скан идёт отдельным процессом.
+ * Выключить: VIARDE_WATCH=off. Таймер ниже остаётся для дискового режима.
+ */
+if (CONFIG.source === 'api' && process.env.VIARDE_WATCH !== 'off') {
+  if (startWatcher()) console.log('[tracker] наблюдатель Dropbox запущен: скан по сигналу об изменениях');
+}
 
 const isProd = process.env.NODE_ENV === 'production';
 const flag = process.env.VIARDE_AUTOSCAN;

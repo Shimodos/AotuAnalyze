@@ -395,16 +395,28 @@ export function isRemoteSyncRunning(): boolean {
   return running !== null;
 }
 
+/**
+ * Синхронизация с общим для процесса замком: если она уже идёт (её запустил
+ * экран настроек или наблюдатель), ждём её и следом запускаем свою — идущая
+ * могла начаться до изменения, ради которого нас позвали.
+ */
+export async function syncRemoteShared(): Promise<RemoteSyncResult> {
+  if (running) await running.catch(() => undefined);
+  if (running) return running;
+  const mine = syncRemote();
+  running = mine;
+  try {
+    return await mine;
+  } finally {
+    if (running === mine) running = null;
+  }
+}
+
 export function syncRemoteInBackground(): void {
   if (running) return;
-  running = syncRemote();
-  running
-    .catch((error) => {
-      console.error('[tracker] синхронизация индекса не удалась:', error instanceof Error ? error.message : error);
-    })
-    .finally(() => {
-      running = null;
-    });
+  syncRemoteShared().catch((error) => {
+    console.error('[tracker] синхронизация индекса не удалась:', error instanceof Error ? error.message : error);
+  });
 }
 
 /** Сводка индекса по проектам — для CLI и экрана настроек */
