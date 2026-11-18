@@ -15,6 +15,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { CONFIG } from '@/config';
 import { isInsideRoot, isSafeSegment, scenePath } from '@/server/paths';
+import { rootDir } from '@/server/root';
 
 /** Латиница намеренно: имя попадает в путь, синхронизацию и чужие инструменты */
 export const REVISIONS_FILE = '_Revisions.txt';
@@ -53,7 +54,7 @@ export function revisionsFilePath(projectPath: string, sceneName: string): strin
   // что ни один сегмент не увёл нас в сторону
   if (path.dirname(target) !== sceneDir) return null;
   if (path.basename(target) !== REVISIONS_FILE) return null;
-  if (!isInsideRoot(target) || target === path.resolve(CONFIG.root)) return null;
+  if (!isInsideRoot(target) || target === path.resolve(rootDir())) return null;
 
   return target;
 }

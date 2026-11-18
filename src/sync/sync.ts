@@ -9,6 +9,7 @@ import { syncRemote } from '@/remote';
 import { scanFromIndex } from '@/remote/scan';
 import { scanAll, type ScannedProject } from '@/scanner/scan';
 import { computeStage } from '@/scanner/stage';
+import { rootDir } from '@/server/root';
 import { SqliteCache } from './cache';
 import { diffDeliveries, diffScenes } from './diff';
 import { recordChange } from './record';
@@ -108,7 +109,7 @@ export async function syncOnceFromIndex(options: SyncOptions = {}): Promise<Sync
   let scanned: ScannedProject[];
   try {
     await syncRemote();
-    scanned = (await scanFromIndex(options.root ?? CONFIG.root)).projects;
+    scanned = (await scanFromIndex(options.root ?? rootDir())).projects;
   } catch (error) {
     // Сеть недоступна или Dropbox отказал. На диск молча не откатываемся:
     // это вернуло бы ту нагрузку, от которой уходили. Доска покажет прежние
@@ -159,7 +160,7 @@ function runSync(options: SyncOptions): SyncResult {
 
   let scanned: ScannedProject[];
   try {
-    scanned = options.scanned ?? scanAll(options.root ?? CONFIG.root, options.withSizes ?? false, cache);
+    scanned = options.scanned ?? scanAll(options.root ?? rootDir(), options.withSizes ?? false, cache);
   } catch (error) {
     // Упавший скан тоже закрываем: иначе запись висит «идущей», а доска
     // после диска, который отвалился, не сможет ни отступить, ни повторить.

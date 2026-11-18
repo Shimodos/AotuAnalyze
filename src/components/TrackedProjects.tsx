@@ -6,6 +6,7 @@ import type { TrackedData, TrackedItem } from '@/app/api/tracked/route';
 import { useI18n } from '@/i18n';
 import { fetchJson } from './fetchJson';
 import { ICON, X } from './icons';
+import { RootFolder } from './RootFolder';
 import styles from './TrackedProjects.module.scss';
 
 interface Props {
@@ -73,6 +74,8 @@ export function TrackedProjects({ onClose }: Props) {
             <X {...ICON} />
           </button>
         </header>
+
+        <RootFolder />
 
         <div className={styles.tools}>
           <input

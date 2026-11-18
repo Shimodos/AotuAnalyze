@@ -9,7 +9,8 @@ import { getDb, schema } from '@/db';
 import { dropboxContent, dropboxPathOf } from '@/dropbox/content';
 import { isConnected } from '@/dropbox/tokens';
 import { isImage, isNoiseFile } from '@/scanner/parse';
-import { dataDir, isInsideRoot } from '@/server/paths';
+import { dataDir } from '@/server/dataDir';
+import { isInsideRoot } from '@/server/paths';
 
 export const dynamic = 'force-dynamic';
 

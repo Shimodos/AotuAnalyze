@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
-import { dataDir } from '@/server/paths';
+import { dataDir } from '@/server/dataDir';
 import * as schema from './schema';
 
 const DB_PATH = process.env.VIARDE_DB ?? path.join(dataDir(), 'data', 'tracker.db');

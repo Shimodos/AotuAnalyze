@@ -9,12 +9,12 @@
 
 import * as path from 'node:path';
 import * as XLSX from 'xlsx';
-import { CONFIG } from '@/config';
 import { dropboxContent } from '@/dropbox/content';
 import type { ScanCache } from '@/scanner/cache';
 import { withScanFs } from '@/scanner/fs';
 import { findPlanFile, parseWorkbook, planCacheRef, type PlanGroup } from '@/scanner/plan';
 import { scanAll, type ScannedProject } from '@/scanner/scan';
+import { rootDir } from '@/server/root';
 import { SqliteCache } from '@/sync/cache';
 import { createIndexFs, type IndexFs } from './fs';
 
@@ -84,7 +84,7 @@ export interface IndexScan {
 }
 
 /** Скан всех загруженных отслеживаемых проектов по индексу. Диск не читается. */
-export async function scanFromIndex(root: string = CONFIG.root): Promise<IndexScan> {
+export async function scanFromIndex(root: string = rootDir()): Promise<IndexScan> {
   const io = createIndexFs(root);
   const cache = new SqliteCache();
   const plans = await fetchPlans(io, cache, root);

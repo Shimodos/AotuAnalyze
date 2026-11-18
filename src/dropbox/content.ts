@@ -7,7 +7,7 @@
  */
 
 import * as path from 'node:path';
-import { CONFIG } from '@/config';
+import { rootDir } from '@/server/root';
 import { getAccessToken, readSetting } from './tokens';
 
 const CONTENT_URL = 'https://content.dropboxapi.com/2';
@@ -34,7 +34,7 @@ export async function dropboxContent(route: string, arg: unknown): Promise<Respo
  * null — путь вне корня.
  */
 export function dropboxPathOf(localPath: string): string | null {
-  const root = path.resolve(CONFIG.root);
+  const root = path.resolve(rootDir());
   const resolved = path.resolve(localPath);
   if (resolved.length <= root.length) return null;
   if (resolved.slice(0, root.length).toLowerCase() !== root.toLowerCase()) return null;

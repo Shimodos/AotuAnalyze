@@ -61,6 +61,56 @@
   }
 }
 
+// Папка Dropbox на этом компьютере — над списком проектов
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 20px 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.rootLabel {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.rootRow {
+  display: flex;
+  gap: 8px;
+}
+
+.rootSave {
+  flex: none;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--chip-muted-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+
+  &:disabled {
+    color: var(--muted);
+    cursor: default;
+  }
+}
+
+.rootHint,
+.rootAlert {
+  font-size: 12px;
+}
+
+.rootHint {
+  color: var(--muted);
+}
+
+.rootAlert {
+  color: var(--alert);
+}
+
 .tools {
   display: flex;
   align-items: center;

@@ -8,26 +8,16 @@
  */
 
 import * as path from 'node:path';
-import { CONFIG } from '@/config';
+import { rootDir } from './root';
 
 /** Папка проекта, в которой лежат сцены; та же, из которой сканер считает кадры */
 export const SCENES_FOLDER = '04_JPG';
 export const OUTBOX_FOLDER = '05_Outbox';
 
-/**
- * Куда программа пишет своё: базу и кеш превью. По умолчанию — папка запуска,
- * как было всегда. Установленной программе писать в свою папку нельзя
- * (Program Files доступна только на чтение), поэтому запускающий её ярлык
- * задаёт VIARDE_DATA_DIR — обычно папку в профиле пользователя.
- */
-export function dataDir(): string {
-  return process.env.VIARDE_DATA_DIR || process.cwd();
-}
-
 /** Путь лежит в корне Dropbox или внутри него. `..` не проходит: сравниваем resolve'нутые пути. */
 export function isInsideRoot(p: string): boolean {
   const resolved = path.resolve(p);
-  const root = path.resolve(CONFIG.root);
+  const root = path.resolve(rootDir());
   return resolved === root || resolved.startsWith(root + path.sep);
 }
 

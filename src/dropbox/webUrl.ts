@@ -10,8 +10,8 @@
  */
 
 import * as path from 'node:path';
-import { CONFIG } from '@/config';
 import { isInsideRoot } from '@/server/paths';
+import { rootDir } from '@/server/root';
 
 const WEB_ROOT = 'https://www.dropbox.com/home';
 
@@ -19,7 +19,7 @@ const WEB_ROOT = 'https://www.dropbox.com/home';
 function relativeToRoot(localPath: string): string | null {
   const resolved = path.resolve(localPath);
   if (!isInsideRoot(resolved)) return null;
-  const root = path.resolve(CONFIG.root);
+  const root = path.resolve(rootDir());
   if (resolved === root) return '';
   return resolved.slice(root.length + 1).split(path.sep).join('/');
 }

@@ -12,9 +12,9 @@
 
 import * as path from 'node:path';
 import { isNotNull } from 'drizzle-orm';
-import { CONFIG } from '@/config';
 import { getDb, schema } from '@/db';
 import type { ScanEntry, ScanFs, ScanStat } from '@/scanner/fs';
+import { rootDir } from '@/server/root';
 
 type Row = typeof schema.remoteEntries.$inferSelect;
 
@@ -27,7 +27,7 @@ export interface IndexFs extends ScanFs {
   projectFolders(): string[];
 }
 
-export function createIndexFs(root: string = CONFIG.root): IndexFs {
+export function createIndexFs(root: string = rootDir()): IndexFs {
   const db = getDb();
   const rootResolved = path.resolve(root);
 

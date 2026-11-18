@@ -15,13 +15,14 @@ import { getDb, schema } from '../src/db';
 import { isConnected } from '../src/dropbox/tokens';
 import { interpolate } from '../src/i18n/interpolate';
 import uk from '../src/i18n/locales/uk.json';
+import { rootDir } from '../src/server/root';
 import { syncOnce, syncOnceFromIndex, type SyncResult } from '../src/sync/sync';
 
 const withSizes = process.argv.includes('--sizes');
 const quiet = process.argv.includes('--quiet');
 const forceDisk = process.argv.includes('--disk');
 const rootArg = process.argv.find((a) => a.startsWith('--root='));
-const root = rootArg ? rootArg.slice('--root='.length) : CONFIG.root;
+const root = rootArg ? rootArg.slice('--root='.length) : rootDir();
 // --run=ID: запись в scan_runs уже создал сервер, который нас запустил
 const runArg = process.argv.find((a) => a.startsWith('--run='));
 const runIdRaw = runArg ? Number(runArg.slice('--run='.length)) : undefined;
