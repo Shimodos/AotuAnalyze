@@ -29,8 +29,36 @@ export interface ChecklistItem {
  * подпапки этапов (001, 002) не считаются, мелочь ниже порога отсекается.
  * Иначе чеклист и счётчик сцены расходились бы в числах.
  */
-export function listSceneFrames(projectPath: string, sceneName: string): string[] {
-  const dir = scenePath(projectPath, sceneName);
+export function listSceneFrames(
+  projectPath: string,
+  sceneName: string,
+  /**
+   * Содержимое папки сцены из индекса Dropbox. Если передано — диск не
+   * читается вообще; так чеклист работает и для проекта, которого на этой
+   * машине нет, и не трогает USB-диск ради списка имён.
+   */
+  fromIndex?: FrameEntry[],
+): string[] {
+  const names = fromIndex ? framesOf(fromIndex) : framesOf(readSceneDir(scenePath(projectPath, sceneName)));
+
+  // Естественная сортировка: Angle2 должен идти до Angle10
+  return names.sort((a, b) => a.localeCompare(b, 'en', { numeric: true, sensitivity: 'base' }));
+}
+
+/** Запись папки сцены — всё, что нужно правилам отбора кадров */
+export interface FrameEntry {
+  name: string;
+  isDir: boolean;
+  size: number;
+}
+
+function framesOf(entries: FrameEntry[]): string[] {
+  return entries
+    .filter((e) => !e.isDir && !isNoiseFile(e.name) && isImage(e.name) && e.size >= CONFIG.minFileSize)
+    .map((e) => e.name);
+}
+
+function readSceneDir(dir: string): FrameEntry[] {
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -38,20 +66,18 @@ export function listSceneFrames(projectPath: string, sceneName: string): string[
     return [];
   }
 
-  const names: string[] = [];
+  const out: FrameEntry[] = [];
   for (const e of entries) {
     if (!e.isFile()) continue;
+    // stat только у того, что может оказаться кадром
     if (isNoiseFile(e.name) || !isImage(e.name)) continue;
     try {
-      if (fs.statSync(path.join(dir, e.name)).size < CONFIG.minFileSize) continue;
+      out.push({ name: e.name, isDir: false, size: fs.statSync(path.join(dir, e.name)).size });
     } catch {
-      continue;
+      /* файл исчез между readdir и stat */
     }
-    names.push(e.name);
   }
-
-  // Естественная сортировка: Angle2 должен идти до Angle10
-  return names.sort((a, b) => a.localeCompare(b, 'en', { numeric: true, sensitivity: 'base' }));
+  return out;
 }
 
 export interface StoredMark {

@@ -81,11 +81,13 @@ export function startBackgroundScan(options: { withSizes?: boolean } = {}): Laun
     .returning({ id: schema.scanRuns.id })
     .all();
 
-  // tsx вызываем напрямую через node, а не через .cmd-обёртку —
-  // иначе на Windows пришлось бы поднимать shell
+  // tsx подключаем загрузчиком (--import), а не запускаем его CLI. CLI сам
+  // порождает ещё один процесс node, а наш дочерний процесс отвязан от консоли
+  // (detached) — и Windows выдаёт внуку новое консольное окно: на экране при
+  // каждом скане всплывал терминал. С загрузчиком процесс один, окна нет.
+  // «tsx» резолвится от cwd, то есть из node_modules проекта.
   const cwd = process.cwd();
-  const tsx = path.join(cwd, 'node_modules', 'tsx', 'dist', 'cli.mjs');
-  const args = [tsx, path.join('scripts', 'scan.ts'), '--quiet', `--run=${run.id}`];
+  const args = ['--import', 'tsx', path.join('scripts', 'scan.ts'), '--quiet', `--run=${run.id}`];
   if (options.withSizes) args.push('--sizes');
 
   try {

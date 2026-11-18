@@ -1,7 +1,11 @@
 import * as nodePath from 'node:path';
 import { NextResponse } from 'next/server';
 import { and, eq } from 'drizzle-orm';
+import { CONFIG } from '@/config';
 import { getDb, schema } from '@/db';
+import { dropboxPathOf } from '@/dropbox/content';
+import { isConnected } from '@/dropbox/tokens';
+import { indexDir } from '@/remote';
 import { listSceneFrames, mergeChecklist, type ChecklistItem, type StoredMark } from '@/checklist/checklist';
 import { writeRevisionsFile, type RevisionItem, type WriteResult } from '@/checklist/file';
 import { currentRound } from '@/checklist/round';
@@ -66,8 +70,12 @@ function knownRounds(projectKey: string, sceneName: string): number[] {
 
 /** Склейка диска и отметок — одна и та же для чтения и для ответа после записи */
 function buildChecklist(project: ProjectRow, scene: string, round: number): ChecklistData {
-  const frames = listSceneFrames(project.path, scene);
   const sceneDir = scenePath(project.path, scene);
+  // При работе через Dropbox API список кадров берём из индекса: диск не
+  // читается. Если индекс про проект не знает — как раньше, с диска.
+  const remoteDir = CONFIG.source === 'api' && isConnected() ? dropboxPathOf(sceneDir) : null;
+  const fromIndex = remoteDir ? (indexDir(project.key, remoteDir) ?? undefined) : undefined;
+  const frames = listSceneFrames(project.path, scene, fromIndex);
   const items = mergeChecklist(frames, marksFor(project.key, scene, round), (name) =>
     fileWebUrl(nodePath.join(sceneDir, name)),
   );

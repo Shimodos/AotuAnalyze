@@ -419,6 +419,42 @@ export function syncRemoteInBackground(): void {
   });
 }
 
+/**
+ * Содержимое одной папки отслеживаемого проекта из индекса — точечным
+ * запросом, без загрузки всего индекса в память.
+ *
+ * null — проект не отслеживается или его дерево ещё не загружено: индекс про
+ * эту папку ничего не знает, и вызывающий вправе спросить диск. Пустой
+ * массив — проект в индексе есть, а папки (или файлов в ней) нет.
+ */
+export function indexDir(
+  projectKeyValue: string,
+  dropboxDir: string,
+): Array<{ name: string; isDir: boolean; size: number }> | null {
+  const db = getDb();
+  const tracked = db
+    .select({ syncedAt: schema.trackedProjects.syncedAt })
+    .from(schema.trackedProjects)
+    .where(eq(schema.trackedProjects.key, projectKeyValue))
+    .get();
+  if (!tracked?.syncedAt) return null;
+
+  const dir = dropboxDir.toLowerCase();
+  return db
+    .select({
+      pathLower: schema.remoteEntries.pathLower,
+      name: schema.remoteEntries.name,
+      isDir: schema.remoteEntries.isDir,
+      size: schema.remoteEntries.size,
+    })
+    .from(schema.remoteEntries)
+    .where(and(gte(schema.remoteEntries.pathLower, dir + '/'), lt(schema.remoteEntries.pathLower, dir + '0')))
+    .all()
+    // диапазон захватывает и вложенное глубже — оставляем прямых потомков
+    .filter((row) => !row.pathLower.slice(dir.length + 1).includes('/'))
+    .map((row) => ({ name: row.name, isDir: row.isDir, size: row.size ?? 0 }));
+}
+
 /** Сводка индекса по проектам — для CLI и экрана настроек */
 export function indexSummary(): Array<{ key: string; folderName: string; synced: boolean; files: number; dirs: number }> {
   const db = getDb();
