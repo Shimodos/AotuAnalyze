@@ -35,7 +35,11 @@ export function TrackedProjects({ onClose }: Props) {
   const toggle = useMutation({
     mutationFn: (item: TrackedItem) =>
       fetchJson<{ ok: true }>('/api/tracked', { json: { key: item.key, tracked: !item.tracked } }),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: ['tracked'] }),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['tracked'] });
+      // доска показывает только отмеченные проекты — карточка должна уйти или вернуться сразу
+      queryClient.invalidateQueries({ queryKey: ['board'] });
+    },
   });
 
   const shown = useMemo(() => {

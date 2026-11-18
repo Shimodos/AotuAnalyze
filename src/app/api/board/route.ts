@@ -76,7 +76,19 @@ export async function GET() {
 
 function buildBoard(): BoardData {
   const db = getDb();
-  const rows = db.select().from(schema.projects).all();
+
+  // Доска показывает только проекты из списка «Проєкти на дошці». Пока список
+  // пуст (настройки ни разу не открывали) — показываем всё, как раньше.
+  // Строку в projects не удаляем: история, пины и чеклисты проекта остаются,
+  // и карточка вернётся, если галочку поставить обратно.
+  const tracked = new Set(
+    db.select({ key: schema.trackedProjects.key }).from(schema.trackedProjects).all().map((r) => r.key),
+  );
+  const rows = db
+    .select()
+    .from(schema.projects)
+    .all()
+    .filter((r) => tracked.size === 0 || tracked.has(r.key));
 
   // Одним запросом на всю доску, а не по проекту на карточку
   const unseen = new Map<string, number>();
