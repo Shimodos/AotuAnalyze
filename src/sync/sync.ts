@@ -2,7 +2,7 @@
  * Скан -> БД. Здесь появляется то, чего нет в файловой системе: история переходов.
  */
 
-import { desc, eq, sql } from 'drizzle-orm';
+import { desc, eq, lt, sql } from 'drizzle-orm';
 import { CONFIG, type Column } from '@/config';
 import { getDb, schema } from '@/db';
 import { syncRemote } from '@/remote';
@@ -393,6 +393,12 @@ function runSync(options: SyncOptions): SyncResult {
       durationMs,
     })
     .where(eq(schema.scanRuns.id, run.id))
+    .run();
+
+  // Старые записи о сканах убираем здесь же: отдельного планировщика нет,
+  // а скан и так только что писал в эту таблицу
+  db.delete(schema.scanRuns)
+    .where(lt(schema.scanRuns.startedAt, new Date(Date.now() - CONFIG.scanRunKeepDays * 86_400_000)))
     .run();
 
   // Скан — главный писатель: полная замена сцен и отгрузок каждый раз.
